@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -172,14 +172,10 @@ test2     cmp #E_EOF
           jsr txoff
 
 irqhs     lda ACIA+1
-#ifndef OLDROM
 	  lda #E_OK
 	  rts
 irqend    lda #E_NOIRQ
 	  rts
-#else
-irqend    rts
-#endif
           .)
 
 irqser2   .(
@@ -233,14 +229,10 @@ test2     cmp #E_EOF
           jsr txoff
 
 irqhs     lda ACIA2+1
-#ifndef OLDROM
 	  lda #E_OK
 	  rts
 irqend    lda #E_NOIRQ
 	  rts
-#else
-irqend    rts
-#endif
           .)
 
 others    cmp #DC_GS

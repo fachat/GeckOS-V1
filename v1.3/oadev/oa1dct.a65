@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -86,12 +86,8 @@ ct2       ;pla
           bcc spil
           cmp #E_EOF
           bne spe
-#ifdef OLDROM
-          jmp txoff
-#else
 	jsr txoff
 	bcc spe		; always
-#endif
 
 spil      sta WD_VIA+VIA_DRB
           lda WD_VIA+VIA_PCR
@@ -100,9 +96,7 @@ spil      sta WD_VIA+VIA_DRB
           ora #%11100000      ;and #%11011111
           sta WD_VIA+VIA_PCR
 spe       clc
-#ifndef OLDROM
 	lda #E_NOIRQ		; no irq source has been removed
-#endif
           rts
 
 sp2       cmp #DC_RX_OFF

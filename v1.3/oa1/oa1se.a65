@@ -844,7 +844,6 @@ noenv     lda #E_NOENV
           rts
           .)
 
-#ifndef OLDROM
 #ifndef NOMMU
 +setmmu1  .(		; set MMU+1 to page (ac) of calling task
 	  clc
@@ -854,7 +853,6 @@ noenv     lda #E_NOENV
 	  sta MMU+1
 	  rts
 	  .)
-#endif
 #endif
 
           .(

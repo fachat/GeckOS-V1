@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -524,9 +524,7 @@ MOG       .(
           JSR GETADR:BCS ge
           STA Z1:STX Z1+1
           jsr setout
-#ifndef OLDROM
 	  jsr setin
-#endif
           lda BRKSR
           pha
           lda BRKAC

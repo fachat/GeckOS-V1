@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -324,11 +324,7 @@ befadr    .word DIRECTORY-1,TYPE-1,DELETE-1,FORMAT-1,CHKDSK-1
 
 initxt    .asc "^M^JSHELL V"
           .byt VSA+"0",".",VSB+"0"
-#ifdef OLDROM
-          .asc "^M^J(C) 1990 BY A.FACHAT^M^J^@"
-#else
           .asc "^M^J(C) 1990-96 BY A.FACHAT^M^J^@"
-#endif
 errtxt    .asc " ?^M^J^@"
 metxt     .asc "^M^J"
           .byt MESSAGE,0
@@ -412,11 +408,9 @@ i5        lda st,x
           lda PCBUF+TN_MEM,x
           jsr HEXOUT
           jsr SSPOUT
-#ifndef OLDROM
 	  lda PCBUF+TN_SP,x
 	  jsr HEXOUT
 	  jsr SSPOUT
-#endif
           lda PCBUF+TN_STDIN,x
           jsr HEXOUT
           jsr SSPOUT
@@ -442,11 +436,7 @@ ie
 	  .)
           
 st        .asc "FRE ENV IBRKBRK RDY IRQ WFRXWFTXWSEMWTRM"
-#ifdef OLDROM
-it        .asc "^M^JNr Name     Stat kB In OutErr^M^J",0
-#else
 it        .asc "^M^JNr Name     Stat kB SP In OutErr^M^J",0
-#endif
 
 &PKILL    jsr GETADR
           bcs pke
@@ -772,7 +762,6 @@ inst      =sysmem+1
           rts
           .)
 
-#ifndef OLDROM
 &&setin    .(
           jsr CHRGOT
           cmp #"<"
@@ -784,7 +773,6 @@ s1        inc LZEI
           txa  
 	  ; jmp opstdin
           .)
-#endif
 
 &opstdin  .(        /* a=neuer StdIn-Stream  */
           ldx insp

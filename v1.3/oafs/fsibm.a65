@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -240,14 +240,12 @@ lflag     =sysmem+2
 -sysmem+=3
 
           stx owntask
-#ifndef OLDROM                  /* get the resource (interface) */
           sec
           ldx #SEM_IBMDISK
           jsr PSEM
           bcc sem_ok
           jmp TERM
 sem_ok
-#endif
           jsr init
           bcs pe
 #ifdef NOMMU
@@ -271,12 +269,10 @@ sem_ok
 #endif
           bcc loop
 pe        
-#ifndef OLDROM
 	  pha
 	  ldx #SEM_IBMDISK
 	  jsr VSEM
 	  pla
-#endif
 	  jmp TERM
 
 loop      jsr SUSPEND
