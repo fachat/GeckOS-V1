@@ -37,6 +37,10 @@
 
 #ifndef ROM
 
+#define	MAXSLOT	8
+#define	IPBUFFER 12*256		/* must be within one (4k) page! */
+#define	MTU	1024
+
 #define	NOPRG
 
 PRGSTART  =$1000
@@ -94,18 +98,481 @@ PRGSTART  =$1000
 
 syszp     =$80
 sysmem    =$1000
+sysblk    =$2000
 
 #endif
 
 #echo slip:
 #print sysmem
+#print sysblk
 #print syszp
 
 /**********************************************************************/
 
-PRG
+PRG	.(
+
+bslot	=sysmem
+len	=sysmem+1
+-sysmem	+=3
+p	=syszp
+endp	=syszp+2
+-syszp	+=4
+
+	jsr binit
+	bcc start
+	rts
+start
+	lda #<MTU
+	ldy #>MTU
+	jsr balloc
+	bcs oops
+
+	stx bslot
+	sta p
+	sty p+1
+	clc
+	adc #<MTU
+	sta endp
+	tya
+	adc #>MTU
+	sta endp+1
+loop
+	jsr SUSPEND
+
+	lda endp
+	sec
+	sbc p
+	sta len
+	lda endp+1
+	sbc p+1
+	sta len+1
+	bne get
+	lda len
+	beq full
+get
+	ldx #STDIN
+	ldy #p
+	lda len+1
+	bne l1
+	lda len
+	.byt $2c
+l1	lda #255
+	jsr GETB
+	bcs nextloop
+
+	/* now we have to check for a slip END mark and split the buffer
+	   accordingly */
+
+nextloop
+	jmp loop
+
+full	/* discard buffer or reallocate? */
+oops	rts
+	.)
+
+/**********************************************************************/
+/* New memory management for IP buffers 			      */
+/* exports							      */
+/* 	binit							      */
+/* 	balloc, bfree, btrunc, bsplit, brealloc			      */
+/*	getbadr, getblen					      */
+
+	.(
+
+slotladr =sysmem
+slothadr =sysmem+MAXSLOT
+slotllen =sysmem+MAXSLOT*2
+slothlen =sysmem+MAXSLOT*3
+-sysmem	+=MAXSLOT*4
+
+flist 	=sysmem
+slot	=sysmem+2
+-sysmem	+=3
+
+p	=syszp
+p2	=syszp+2
+p3	=syszp+4
+p4	=syszp+6
+-syszp	+=8
+
+-sysblk	-=IPBUFFER
+buf	=sysblk
+
+/* init memory management */
+&binit	.(
+	lda #0
+	tay
+l0	sta slotladr,y
+	sta slothadr,y
+	iny
+	cpy #MAXSLOT
+	bcc l0
+
+	sta buf		; freelist start
+	sta buf+1
+	lda #<IPBUFFER
+	sta buf+2
+	lda #>IPBUFFER
+	sta buf+3
+	
+	lda #<buf
+	sta flist
+	lda #>buf
+	sta flist+1
+
+	rts
+	.)
+
+/* a/y = size of buffer to be allocated -> x buffer-ID */       
+&balloc	.(
+	/* walk along freelist, and take first matching buffer 
+	   length is made a multiple of 8 (for freelist connectors */
+	pha
+	jsr getbslot
+	bcs oops
+	stx slot
+	pla
+
+	adc #7
+	and #%11111000
+	sta slotllen,x
+	tya
+	adc #0
+	sta slothlen,x
+
+	lda #0
+	sta p2
+	sta p2+1
+	lda flist
+	sta p
+	lda flist+1
+	sta p+1
+l0
+	ldy #2
+	lda (p),y
+	sec
+	sbc slotllen,x
+	sta p3
+	iny
+	lda (p),y
+	sbc slotllen,x
+	sta p3+1
+	bcs found 
+next
+	lda p
+	sta p2
+	lda p+1
+	sta p2+1
+	dey
+	lda (p2),y
+	sta p+1
+	dey
+	lda (p2),y
+	sta p
+	ora p+1
+	bne l0
+	
+oops	
+	sec
+	rts	
+
+found
+	/* ok, we found a free buffer: p points to the buffer, p2 to the
+	   previous one. p3 is the length of the free buffer minus the
+	   needed size. If the buffer is longer than needed, create a 
+	   new free buffer, then link new buffer to freelist */
+
+	lda p		/* save buffer address */
+	sta slotladr,x
+	lda p+1
+	sta slothadr,x
+		
+	lda p3 		/* check length */
+	ora p3+1
+	beq nocreate
+	
+	lda p		/* get address of new free buffer */
+	clc
+	adc slotllen,x
+	sta p4
+	lda p+1
+	adc slothlen,x
+	sta p4+1
+
+	ldy #0		/* copy next pointer */
+	lda (p),y
+	sta (p4),y
+	iny
+	lda (p),y
+	sta (p4),y
+
+	iny		/* set new length */
+	lda p3
+	sta (p4),y
+	iny
+	lda p3+1
+	sta (p4),y
+
+	lda p4
+	sta p
+	lda p4+1
+	sta p+1
+
+nocreate
+	lda p2
+	ora p2+1
+	beq freestart
+
+	ldy #0
+	lda p
+	sta (p2),y
+	iny
+	lda p+1
+	sta (p2),y
+	clc
+	bcc geta
+freestart
+	lda p
+	sta flist
+	lda p+1
+	sta flist+1
+	clc
+geta
+	lda slotladr,x
+	ldy slothadr,x
+	rts
+	.)
+
+/* free buffer (ID=xr) */
+&bfree	.( 
+	lda slothadr,x
+	sta p3+1
+	lda slotladr,x
+	sta p3
+	ora p3+1
+	beq end
+
+	ldy #2
+	lda slotllen,x
+	sta (p3),y
+	iny
+	lda slothlen,x
+	sta (p3),y	
+
+	lda #0
+	sta slothadr,x
+	sta slotladr,x
+
+	lda flist
+	ora flist+1
+	bne ok		/* no free buffer so far? */
+
+	lda p3
+	sta flist
+	lda p3+1
+	sta flist+1
+	ldy #0
+	tya
+	sta (p3),y
+	iny
+	sta (p3),y
+	clc
+	rts
+ok	
+	lda #0
+	sta p2
+	sta p2+1
+	lda flist
+	sta p
+	lda flist+1
+	sta p+1
+
+	/* we have to find the place where to put the buffer in the
+	   ordered free list. Then we have to check if we can merge
+	   free buffers */
+loop
+	lda p3+1
+	cmp p+1
+	bcc found
+	bne next
+	lda p3
+	cmp p
+	bcc found
+next
+	lda p
+	sta p2
+	lda p
+	sta p2+1
+	ldy #0
+	lda (p2),y
+	sta p
+	iny
+	lda (p2),y
+	sta p+1
+	ora p
+	bne loop
+	beq found
+end
+	clc
 	rts
 
-        
+found	/* p2 is the buffer before the one to be freed, p the one behind.
+	   p3 is the buffer to be inserted */
+	ldy #1
+	lda (p2),y
+	sta (p3),y
+	dey
+	lda (p2),y
+	sta (p3),y
+	lda p3
+	sta (p2),y
+	iny
+	lda p3+1
+	sta (p2),y
+
+	lda p3
+	ldy p3+1
+	jsr bmerge
+	lda p2
+	ldy p2+1
+	jsr bmerge
+	clc
+	rts
+	.)
+
+/* split buffer xr at size a/y for first part. return new buffer ID in x */
+&bsplit	.(
+	stx slot
+	sta p2
+	sty p2+1
+	tya
+	cmp slothlen,x
+	bcc ok
+	bne oops
+	lda p2
+	cmp slotllen,x
+	bcc ok
+	beq oknull
+oops	rts
+ok	jsr getbslot
+	bcs oops
+	ldy slot
+	clc
+	lda slotladr,y
+	adc p2
+	sta slotladr,x
+	lda slothadr,y
+	adc p2+1
+	sta slothadr,x
+	sec
+	lda slotllen,y
+	sbc p2
+	sta slotllen,x
+	lda slothlen,y
+	sbc p2+1
+	sta slothlen,x
+	
+	lda p2
+	sta slotllen,y
+	lda p2+1
+	sta slothlen,y
+	
+oknull	clc
+	rts
+	.)
+
+/* truncate buffer xr to size a/y */
+&btrunc	.(
+	jsr bsplit
+	bcs oops
+	jmp bfree
+oops	rts
+	.)
+
+/* realloc buffer xr to size a/y */
+/* produce assemble errror
+&brealloc .(
+	.)
+*/
+
+/* get adress of buffer */
+&getbadr .(
+	lda slotladr,x
+	ldy slothadr,x
+	clc
+	rts
+	.)
+
+/* get length of buffer */
+&getblen .(
+	lda slotllen,x
+	ldy slothlen,x
+	clc
+	rts
+	.)
+
+/* get free buffer-ID slot */
+getbslot .(
+	ldx #0
+l0
+	clc
+	lda slotladr,x
+	ora slothadr,x
+	beq found
+	inx
+	cpx #MAXSLOT
+	bcc l0
+found
+	rts
+	.)
+
+/* check if two buffers can be merged */
+bmerge	.(
+	sta p
+	sty p+1
+	ldy #2
+	clc
+	lda (p),y
+	adc p
+	sta p3
+	iny
+	lda (p),y
+	adc p+1
+	sta p3+1
+	ldy #0
+	lda (p),y
+	cmp p3
+	bne nomerge
+	iny
+	lda (p),y
+	cmp p3+1
+	bne nomerge
+merge
+	ldy #2
+	clc
+	lda (p3),y
+	adc (p),y
+	sta (p),y
+	iny
+	lda (p3),y
+	adc (p),y
+	sta (p),y
+	ldy #0
+	lda (p3),y
+	sta (p),y
+	iny
+	lda (p3),y
+	sta (p),y
+nomerge
+	clc
+	rts
+	.)
+
+	.)
+
+#print sysmem
+#print sysblk
+#print syszp
+
 PRGEND    .)
 
