@@ -37,7 +37,14 @@
 
 #ifndef ROM
 
-#define	DEBUG
+/*#define	DEBUG*/
+/*#define	DEBUGMEM*/
+#if 0
+#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr ETxtout:.):
+#else
+#define	DB(a)
+#endif
+
 
 #define	MY_IP		192,168,0,13
 #define	MAXOQUEUE	4
@@ -54,11 +61,6 @@
 #include "oa1fs.def"
 #include "stdio.a65"
 
-#ifdef DEBUG
-#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr ETxtout:.):
-#else
-#define	DB(a)
-#endif
 
 #define	MAXSLOT	8
 #define	IPBUFFER 12*256		/* must be within one (4k) page! */
@@ -166,8 +168,8 @@ DB("^m^jbinit ok^m^j")
 	jsr oinit
 	bcs exit
 DB("^m^joinit ok^m^j")
-	jsr startin
-DB("startin ok^m^j")
+	jsr iinit
+DB("iinit ok^m^j")
 #ifdef DEBUG
 jsr printmem
 #endif
@@ -340,10 +342,13 @@ id	=syszp+2
 iend	=syszp+4
 -syszp	+=6
 
-&startin
-#ifdef DEBUG
-jsr printmem
-#endif
+&iinit	
+	lda #<-1
+	sta islot
+	clc
+	rts
+
+startin
 	lda #<MTU
 	ldy #>MTU
 	jsr balloc
@@ -362,7 +367,14 @@ iresp	sta ip			/* reset packet */
 	lda #0
 	sta ist
 	clc
+#ifdef DEBUGMEM
+	rts
+oops	
+DB("startin Oops!^m^j")
+jsr printmem
+#else
 oops	rts
+#endif	
 
 inbuf	.(
 
@@ -413,11 +425,16 @@ err	rts
 	.)
 
 &loopin	.(
+	bit islot
+	bpl running
+	jsr startin
+	bcs ende
+running
 	ldx #STDIN
 	jsr GETC
 	;jsr inbuf
 	bcc gotbyt
-	rts
+ende 	rts
 gotbyt
 	cmp #SL_END
 	beq gotpacket
@@ -479,8 +496,8 @@ ok
 
 #ifdef DEBUG
 	/* so what now? */
-DB("^m^jReceived Packet:^m^j")
-	jsr printpacket
+/*DB("^m^jReceived Packet:^m^j")*/
+	;jsr printpacket
 
 DB("^m^jip=")
 lda ip+1:jsr EHexout:lda ip:jsr EHexout
@@ -731,21 +748,28 @@ l0	lda MyIP-IPH_SRC,y
 	txa
 	sta (id),y
 
-#ifdef DEBUG
+#if 0	/*def DEBUG*/
 DB("^m^jSend packet:^m^j")
 jsr printpacket
-#endif
 tsx
 txa
 jsr EHexout
+#endif
 	ldx islot
 	lda ilen
 	ldy ilen+1
 	jsr btrunc
-
+#ifdef DEBUGMEM
+DB("btrunc'd packet^m^j")
+#endif
 	ldx islot
 	jsr queueslot
-	jmp startin
+#ifdef DEBUGMEM
+DB("queued packet^m^j")
+#endif	
+	lda #<-1
+	sta islot
+	jsr startin
 	rts
 	.)
 
@@ -1009,7 +1033,7 @@ gotslot
 	adc #0
 	sta slothlen,x
 
-#ifdef DEBUG
+#ifdef DEBUGMEM
 DB("^m^jalloc(")
 txa
 jsr EHexout
@@ -1032,7 +1056,7 @@ jsr ECrlfout
 	lda flist+1
 	sta p+1
 l0
-#ifdef DEBUG
+#if 0	/*def DEBUG*/
 DB("^m^jCheck@")
 lda p+1:jsr EHexout:lda p:jsr EHexout
 jsr ECrlfout
@@ -1052,7 +1076,7 @@ jsr ECrlfout
 	sta p2
 	lda p+1
 	sta p2+1
-	dey
+	ldy #1
 	lda (p2),y
 	sta p+1
 	dey
@@ -1071,7 +1095,7 @@ found
 	   needed size. If the buffer is longer than needed, create a 
 	   new free buffer, then link new buffer to freelist */
 
-#ifdef DEBUG
+#if 0	/*def DEBUG*/
 DB("^m^jFound Free buffer to alloc:")
 DB("^m^jbuffer=")
 lda p+1:jsr EHexout:lda p:jsr EHexout
@@ -1136,7 +1160,7 @@ nocreate
 	clc
 	bcc geta
 freestart
-#ifdef DEBUG
+#if 0	/*def DEBUG*/
 DB("^m^jFreestart")
 lda p+1:jsr EHexout:lda p:jsr EHexout:jsr ECrlfout
 #endif
@@ -1146,6 +1170,15 @@ lda p+1:jsr EHexout:lda p:jsr EHexout:jsr ECrlfout
 	sta flist+1
 	clc
 geta
+#ifdef DEBUGMEM
+php
+DB("^m^jallocated buffer ")
+txa: jsr EHexout
+lda slothadr,x: jsr EHexout: lda slotladr,x: jsr EHexout
+lda slothlen,x: jsr EHexout: lda slotllen,x: jsr EHexout
+jsr ECrlfout
+plp
+#endif
 	lda slotladr,x
 	ldy slothadr,x
 	rts
@@ -1160,15 +1193,20 @@ geta
 	ora p3+1
 	beq end2
 
-#ifdef DEBUG
-DB("^m^jFreeing Slot ")
+#ifdef DEBUGMEM
+DB("Freeing Slot ")
 txa:jsr EHexout
 lda p3+1
 jsr EHexout
 lda p3
 jsr EHexout
+lda slothlen,x
+jsr EHexout
+lda slotllen,x
+jsr EHexout
 jsr ECrlfout
 #endif
+
 	ldy #2
 	lda slotllen,x
 	sta (p3),y
@@ -1184,10 +1222,6 @@ jsr ECrlfout
 	ora flist+1
 	bne ok		/* no free buffer so far? */
 
-#ifdef DEBUG
-DB("^m^jFreeing...")
-lda p3+1:jsr EHexout:lda p3:jsr EHexout:jsr ECrlfout
-#endif
 	lda p3
 	sta flist
 	lda p3+1
@@ -1212,10 +1246,11 @@ ok
 	   ordered free list. Then we have to check if we can merge
 	   free buffers */
 loop
-#ifdef DEBUG
-DB("Check slot @ ")
-lda p+1: jsr EHexout
-lda p: jsr EHexout
+#if 0	/*def DEBUGMEM*/
+DB("Check slot ")
+lda p+1: jsr EHexout:lda p: jsr EHexout
+DB("["): ldy #3:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
+DB("]->"):ldy #1:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
 jsr ECrlfout
 #endif
 
@@ -1229,7 +1264,7 @@ jsr ECrlfout
 next
 	lda p
 	sta p2
-	lda p
+	lda p+1
 	sta p2+1
 	ldy #0
 	lda (p2),y
@@ -1247,12 +1282,20 @@ end
 found	/* p2 is the buffer before the one to be freed, p the one behind.
 	   p3 is the buffer to be inserted */
 
-#ifdef DEBUG
+#if 0	/*def DEBUGMEM*/
 DB("Found buffer^m^j")
 DB("p3=")
 lda p3+1:jsr EHexout:lda p3:jsr EHexout:jsr ECrlfout
 DB("p2=")
-lda p2+1:jsr EHexout:lda p2:jsr EHexout:jsr ECrlfout
+lda p2+1:jsr EHexout:lda p2:jsr EHexout
+DB("["):ldy #3:lda (p2),y:jsr EHexout:dey:lda (p2),y:jsr EHexout
+DB("]->"):ldy #1:lda (p2),y:jsr EHexout:dey:lda (p2),y:jsr EHexout
+jsr ECrlfout
+DB("p=")
+lda p+1:jsr EHexout:lda p:jsr EHexout
+DB("["):ldy #3:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
+DB("]->"):ldy #1:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
+jsr ECrlfout
 #endif
 	lda p2
 	ora p2+1
@@ -1269,14 +1312,17 @@ lda p2+1:jsr EHexout:lda p2:jsr EHexout:jsr ECrlfout
 	ldy p3+1
 	sty flist+1
 	jsr bmerge
+#if 0	/*def DEBUGMEM*/
+jsr printmem
+#endif
 	clc
 	rts
 fok			; insert to list
 	ldy #1
-	lda (p2),y
+	lda p+1		;lda (p2),y
 	sta (p3),y
 	dey
-	lda (p2),y
+	lda p		;lda (p2),y
 	sta (p3),y
 	lda p3
 	sta (p2),y
@@ -1290,6 +1336,9 @@ fok			; insert to list
 	lda p2
 	ldy p2+1
 	jsr bmerge
+#if 0	/*def DEBUGMEM*/
+jsr printmem
+#endif	
 	clc
 	rts
 	.)
@@ -1297,6 +1346,25 @@ fok			; insert to list
 /* split buffer xr at size a/y for first part. return new buffer ID in x */
 &bsplit	.(
 	stx slot
+#ifdef DEBUGMEM
+pha
+tya
+pha
+DB("^m^jbsplit buffer ")
+txa
+jsr EHexout
+pla
+pha
+jsr EHexout
+pla
+tay
+pla
+pha
+jsr EHexout
+jsr ECrlfout
+pla
+#endif
+
 	clc
 	adc #MINBUF-1
 	and #MINMASK
@@ -1336,7 +1404,22 @@ ok	jsr getbslot
 	lda p2+1
 	sta slothlen,y
 	
-oknull	clc
+oknull	
+#ifdef DEBUGMEM
+DB("^m^jsplit buffer @")
+	txa
+	jsr EHexout
+	lda slothadr,x
+	jsr EHexout 
+	lda slotladr,x
+	jsr EHexout 
+	lda slothlen,x
+	jsr EHexout 
+	lda slotllen,x
+	jsr EHexout 
+	jsr ECrlfout
+#endif
+	clc
 	rts
 	.)
 
@@ -1344,8 +1427,6 @@ oknull	clc
 &btrunc	.(
 	jsr bsplit
 	bcs oops
-DB("^m^jBsplit OK!^m^j")
-
 	jmp bfree
 oops	rts
 	.)
@@ -1387,7 +1468,7 @@ found
 	rts
 	.)
 
-/* check if two buffers can be merged */
+/* check if two buffers (i.e. a/y plus following) can be merged */
 bmerge	.(
 	sta p
 	sty p+1
@@ -1429,7 +1510,7 @@ nomerge
 	rts
 	.)
 
-#ifdef DEBUG
+#ifdef DEBUGMEM
 &printmem .(
 DB("^m^jMemory Free List:^m^j")
 	lda flist
