@@ -524,6 +524,9 @@ MOG       .(
           JSR GETADR:BCS ge
           STA Z1:STX Z1+1
           jsr setout
+#ifndef OLDROM
+	  jsr setin
+#endif
           lda BRKSR
           pha
           lda BRKAC
