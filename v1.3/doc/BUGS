@@ -1,12 +1,7 @@
 
 - serial line drivers ignore handshake value (rts/cts vs. xon/xoff)
 
-- serial line (UART driver) interrupts increase cursor speed...
-
-- dropped characters above 2400 baud with FIFO still seems strange,
-  esp with a 16550A!
-
-- not really a bug but annoying: Semaphores are polled in the scheduler,
+- not really a bug, but: Semaphores are polled in the scheduler,
   instead of the task being set READY when the semaphore is freed 
 
 - the terminal device can leave an inverted space when pressing return

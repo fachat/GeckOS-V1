@@ -110,7 +110,7 @@ devini    lda #0
 
 	lda #%10000000
 	sta UART+UART_LCR
-	ldx #10*2			; 2400 BAUD
+	ldx #14*2			; 9600 BAUD
 	lda divisor,x
 	sta UART+UART_DLL
 	lda divisor+1,x
@@ -131,7 +131,7 @@ devx      lda status,x
 /*****************************************************************/
 
 devirq    
-          .(
+        .(
 	lda UART+UART_IIR
 	lsr
 	bcc intr
@@ -141,7 +141,17 @@ devirq
 	beq notxpoll		; check if tx FIFO empty
 	jsr tx2
 notxpoll
-	jmp irqend		; not this one
+	; check receiver data available
+	lda UART+UART_LSR
+	and #1
+	beq irqend
+	jsr rx2
+	jmp notxpoll
+
+irqend  lda #E_NOIRQ		; no irq source found
+	rts			; not this one
+
+	;-----------------------------------------------
 
 intr
 	and #%00000111		; interrupt mask
@@ -150,53 +160,62 @@ intr
 	cmp #6
 	bne tx
 rx
-          bit status		; check if receiving
-          bmi rxok		; no -> tx
+        bit status		; check if receiving
+        bmi rxok		; no -> tx
 	lda UART+UART_RXTX
-	jmp devirq
-rxok
-	lda UART+UART_RXTX
-          ldx outstr
-          jsr PUTC
-          bcs test
-
-nobyt     ldx outstr
-          lda #SC_STAT
-          jsr STRCMD
-test      bcc devirq
-          cmp #E_NUL
-          bne tstwater
-          jsr rxoff
-          jmp devirq
-tstwater  cmp #E_SEMPTY
-          beq wl
-          tax
-          lda status
-          and #1
-          bne wh
-          txa
-          cmp #E_SFULL
-          beq wh
-          cmp #E_SHWM
-          bne twl
-wh      ldx #0  
-	jsr rtshi
-          jmp tx         ; unbedingt
-twl       cmp #E_SLWM
-          bne devirq
-wl      ldx #0  
-	jsr rtslo
-
-	;-----------------------------------------------
+	jmp checkint
+rxok 	jsr rx2
+	jmp checkint
 tx       
 	cmp #1
-	bne irqend
+	bne checkint
 	jsr tx2
-irqok     
-	lda #E_OK		; irq source removed
+
+checkint
+	lda UART+UART_IIR
+	lsr
+	bcc intr		; irq still pending
+
+irqok   lda #E_OK		; irq source removed
 	rts
-irqend  lda #E_NOIRQ		; no irq source found
-	rts
+
+	;-----------------------------------------------
+
+rx2	.(
+	lda UART+UART_RXTX
+        ldx outstr
+        jsr PUTC
+        bcs test
+
+nobyt   ldx outstr
+        lda #SC_STAT
+        jsr STRCMD
+test    bcc devirq
+        cmp #E_NUL
+        bne tstwater
+        jmp rxoff
+tstwater  
+	cmp #E_SEMPTY
+        beq wl
+        tax
+        lda status
+        and #1
+        bne wh
+        txa
+        cmp #E_SFULL
+        beq wh
+        cmp #E_SHWM
+        bne twl
+wh      ldx #0  
+	jmp rtshi
+twl     cmp #E_SLWM
+        bne rx2end
+wl      ldx #0  
+	jmp rtslo
+rx2end	rts
+	.)
+
+	;-----------------------------------------------
 
 tx2 	.(
 	bit status
@@ -219,7 +238,7 @@ txloop
 
 test2   cmp #E_EOF
         bne txrt
-        jsr txoff
+        jmp txoff
 txrt	rts
 	.)
 
