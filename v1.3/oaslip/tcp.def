@@ -1,4 +1,9 @@
 
+#define	TIMER		25	/* makes other times in ca. 1/10 Hz */
+
+#define	TIME_MSL	100	/* 10 seconds ? */
+#define	TIME_RETRANS	30	/* 3 seconds ? */
+
 #define	MAXCONN		8
 
 /* TCP connection states */
@@ -57,10 +62,13 @@
 #define	TCB_STATE	32	/* state of connection */
 #define	TCB_LSTATE	33	/* last state of connection */
 #define	TCB_FLAG	34	/* 1 = FIN received */
-#define	TCB_NTXBUF	35	/* number of buffers in retranmission buffer */
-#define	TCB_TXBUF	36	/* retransmission buffer */
+#define	TCB_MSL		35	/* two byte time count */
+#define	TCB_RETRANS	37	/* two byte time count */
+#define	TCB_TRIES	39	/* number of sends so far */
+#define	TCB_NTXBUF	40	/* number of buffers in retranmission buffer */
+#define	TCB_TXBUF	41	/* retransmission buffer */
 
-#define	TCB_LEN		36+TCP_MAXTXB
+#define	TCB_LEN		41+TCP_MAXTXB
 
 #define	TCPWIN		512	/* we have a receive window of this size */
 #define	TCPSEG		256	/* we send maximal TCPSEG sized segments */
