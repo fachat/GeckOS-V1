@@ -85,6 +85,9 @@ devstart
 /*#include  "c64ds.a65"*/
 #include  "c64ds3.a65"
 
+#ifdef UARTBASE
+#include  "c64ds2.a65"
+#endif
           .word $ffff
 
 

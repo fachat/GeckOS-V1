@@ -145,7 +145,7 @@ mtly      lda pz+1
           lda #32
 #endif			/* ROMTEST */
 
-#else
+#else			/* C64 */
 	  lda #7
 	  sta 0		/* CPU data direction register */
 	  lda #5
@@ -523,7 +523,7 @@ pre5      adc #1:bne pre5
         sec
         rts
 #else
-
+/*
 #ifdef  NOMMU     
 #ifdef  NMIDEV
 #ifdef CMOSCPU
@@ -538,7 +538,7 @@ pre5      adc #1:bne pre5
           pha
 #endif
           cld
-
+*/
 ;          jsr x
 ;          jmp yendirq
 ;x         
@@ -549,12 +549,23 @@ nmiadr    =sysmem
 
 &ininmi   ;lda #<zend
           ;ldy #>zend
-	  lda #<yendirq
-	  ldy #>yendirq
+	  lda #<yendnmi
+	  ldy #>yendnmi
 n1        sta nmiadr
           sty nmiadr+1
           clc
 zend      rts
+
+yendnmi
+/*
+	  pla
+          tax
+          pla
+          tay
+          pla
+*/
+	  ;bit C64CIA2+CIA_ICR	; clear NMI
+          rti
 
 +setnmi   jsr memsys
           bcc n2

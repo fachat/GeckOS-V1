@@ -42,6 +42,8 @@
 
 #define	ROMSTART	$8000	/* where the ROM starts */
 
+#define	UARTBASE	$d600	/* if you have a 16550A UART with FIFO */
+
 #define	CLEARMEM	0	/* Clear memory to 0 on boot, C64 only */
 
 #define	STACKCOPY		/* if defined, save stack area in memory
@@ -57,7 +59,7 @@
 				   kernel enables timer irq!! (reading 
 				   it causes all flags to be reset!) 
 				   If you use the plain C64 9600 baud RS232
-				   interface (ds3), this has to be defined! */
+				   interface (ds3), this must not be defined! */
 		
 #define PARALLEL		/* for IEEE488 interface from Commodore 
 				   disables serial bus interface! */
