@@ -164,3 +164,11 @@ Hopefully now occasional BRKs are gone.
 FSIEC does now recognize the "/" DIRSIGN at the beginning of a directory
 search mask and removes it - all filenames are global.
 
+******** OS/A 1.3.7 ******** 30jun1996 A.Fachat
+
+Introduced return code for device interrupt routines. It is returned
+if an interrupt source has been cleared (E_OK) or not (E_NOIRQ).
+This is checked, and if a source has been removed, the interrupt 
+routine is left - if we cannot check the irq line directly with SYSINPORT.
+The C64 got a ACIA 6551 device, if it is built in to the C64.
+

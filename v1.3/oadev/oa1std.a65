@@ -155,7 +155,11 @@ irqhs
 
 /*******************************************************************/
 
-irqend    rts
+	  lda #E_OK		; interrupt source removed
+	  rts
+irqend    
+	  lda #E_NOIRQ		; no interrupt source removed
+	  rts
 
           .)
 

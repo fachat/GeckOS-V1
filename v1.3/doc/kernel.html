@@ -79,6 +79,9 @@ $f027	DEVCMD	executes device commands. parameter: device number in x,
 		possible stream commands are:
 
 		DC_IRQ		0	execute IRQ routine
+					the interrupt routine has to return
+					E_OK if an interrupt source is cleared
+					or E_NOIRQ if not.
 		DC_RES		1	initialize device
 		DC_GS		2	sets the stream (in y) the device 
 					reads from

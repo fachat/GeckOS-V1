@@ -128,6 +128,13 @@ zei2      =syszp+2
           .(
 p2x       jmp p2
 
+#ifndef OLDROM
+noirq	lda #E_NOIRQ
+	.byt $2c
+wasirq	lda #E_OK
+	rts
+#endif
+
 &p1       pha
           lda status,x
           and #DC_SW_EXIT
@@ -142,16 +149,24 @@ p1ok      pla
 #ifndef NOSYSPORT
 #ifndef NOSINPORT
           bit SYSPORT
+#ifdef OLDROM
           bpl re         ; kein TIRQ dann Ende
+#else
+	  bpl noirq
+#endif
           lda SYSPORT
           sta SYSPORT
 #endif
 #endif          
           jsr bellirq
 
-#ifndef C64		/* no interruptable video device */          
+#ifndef C64		/* no interuptable video device */          
           lda syscnt
+#ifdef OLDROM
           bmi re
+#else
+	  bmi wasirq
+#endif
           lda SYSPORT
           and #1
           beq x1x	; CPU irq line active
@@ -172,6 +187,9 @@ x3        jsr setscr
           bcc x3
 xe        sei
           inc syscnt
+#ifndef OLDROM
+	lda #E_NOIRQ
+#endif
           rts
 #endif /* C64 */
           
@@ -183,8 +201,12 @@ x1        .)
           ldy xscreen
           lda status,y
           and #DC_SW_EXIT
+#ifdef OLDROM
           beq x1ok
           rts
+#else
+	  bne wasirq
+#endif
 x1ok      lda status,y
           and #DC_SW_RX
           beq p1c
@@ -320,7 +342,15 @@ p1d       .)
           cmp xscreen
           bne p1g
           jsr setcrsr
-p1g       rts
+p1g       
+#ifndef OLDROM
+#ifdef C64
+	lda #E_NOIRQ
+#else
+	lda #E_OK
+#endif
+#endif
+	  rts
           .)
           .)
 

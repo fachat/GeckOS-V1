@@ -82,7 +82,7 @@ devstart
 /*#include  "oadev\oa1dct.a65"*/
 #include  "oadev\oa1dnl.a65"
 #include  "oadev\oa1dsp.a65"
-/*#include  "oadev\oa1ds.a65"*/
+#include  "c64ds.a65"*/
 
           .word $ffff
 

@@ -21,33 +21,46 @@
 
 ****************************************************************************/
 
+/*
+ * The ACIA 6551 has a real bad 'feature'. The RTS/CTS lines are not
+ * independent from the transmitter and receiver. Instead, making
+ * RTS high automatically disables receiver _and_ transmitter!
+ * Also an incoming CTS high immediately disables the transmitter.
+ * That's why I use the DSR input for the CTS modem line. This line
+ * can be checked independently.
+ */
 
+#ifdef C64ACIA
+#define	ACIA	C64ACIA
+#else
+#define ACIA	$d600
+#endif
 
-#define   ACIA      $efe8
-#define   ACIA2     $e818
-#define   PIA2      $e810
-#define   Anzdev    2
-  
+#define	Anzdev	1
+
           .(
-          .word devend1
-          jmp prg1
-          .asc "ser1",0
+	  .word devend2
+	  jmp prg1
+	  .asc "ser1",0
 
-devend1   .word devend2
-          jmp prg2
-          .asc "ser2",0
+/*
+ * status: Bit 	0 = 1= handshake enabled
+ *		1 : 1= no ACIA found
+ * 		5 : 1= set RTS hi
+ *		6 : 1= we are transmitting
+ *	  	7 : 1= we are receiving
+ *
+ */
 
 dev       =sysmem
 div       =sysmem+1
 status    =sysmem+2
 instr     =sysmem+Anzdev+2
 outstr    =sysmem+Anzdev*2+2
-
 -sysmem   +=Anzdev*3+2
 
 prg1      ldx #0
-          .byt $2c
-prg2      ldx #1
+
           stx dev
           cmp #DC_RES
           beq devini
@@ -69,39 +82,18 @@ devini    lda #0
           sta instr,x
           sta outstr,x
 
-          cpx #1
-          beq iniser2
-          
-          STA ACIA+1
-          LDA #%00011000; 1200 BAUD
-          STA ACIA+3
-          cmp ACIA+3
+          STA ACIA+ACIA_SR		; programmed reset
+          LDA #%00011000		; 1200 BAUD, 1 stop bit, 8 data bits
+          STA ACIA+ACIA_CTRL
+          cmp ACIA+ACIA_CTRL
           bne devx
-          LDA #%00000101
-          STA ACIA+2
-          cmp ACIA+2
+          LDA #%00000101		; no parity, normal receiver mode,
+					; RTS low, Tx interrupt enabled
+          STA ACIA+ACIA_CMD
+          cmp ACIA+ACIA_CMD
           bne devx
-          LDA ACIA+1
-rts1hi    lda SYSPORT         /* RTS hi     */
-          ora #SYS_RTS
-          sta SYSPORT 
-          clc
-          rts
+          LDA ACIA+ACIA_SR		; clear interrupt
 
-iniser2   STA ACIA2+1
-          LDA #%00011000; 1200 BAUD
-          STA ACIA2+3
-          cmp ACIA2+3
-          bne devx
-          LDA #%00000101
-          STA ACIA2+2
-          cmp ACIA2+2
-          bne devx
-          LDA ACIA2+1
-rts2hi    lda PIA2+PIA_CRA    /*   CA2 output hi =RTS Hi   */
-          ora #%00111000
-          ;and #%11110111
-          sta PIA2+PIA_CRA
           clc
           rts
 
@@ -112,18 +104,15 @@ devx      lda status,x
           sec
           rts
           
-devirq    cpx #1
-          bne irqser1
-          jmp irqser2
-irqser1
+devirq    
           .(
-          lda ACIA+1
-          bpl irqend
+          lda ACIA+ACIA_SR
+          bpl irqend		; not this ACIA
           tay
-          bit status
-          bpl tx
-          and #%00001000
-          beq nobyt
+          bit status		; check if receiving
+          bpl tx		; no -> tx
+          and #%00001000	; Rx data register full?
+          beq nobyt		; no -> nobyt
           ldx outstr
           lda ACIA
           jsr PUTC
@@ -148,21 +137,27 @@ tstwater  cmp #E_SEMPTY
           beq wh
           cmp #E_SHWM
           bne twl
-wh        jsr rts1hi
-          bcc tx         ; unbedingt
+wh        jsr rtshi
+          jmp tx         ; unbedingt
 twl       cmp #E_SLWM
           bne tx
-wl        lda SYSPORT
-          and #255-SYS_RTS    ; IO freigeben
-          sta SYSPORT
+wl        jsr rtslo
 
 tx        bit status
           bvc irqhs
           tya
-          and #%01010000
-          eor #%00010000
-          bne irqhs
-          ldx instr
+	and #%00010000		; transmit data register empty?
+	beq irqhs		; no then -> irqhs
+
+	lda #32
+	bit status
+	bne endsend		; do not send any more to make RTS high.
+
+	tya
+	and #%01000000		; DSR high?
+	beq irqhs		; -> irqhs
+
+          ldx instr		; send new data byte
           jsr GETC
           bcs test2
           sta ACIA
@@ -171,77 +166,34 @@ test2     cmp #E_EOF
           bne irqhs
           jsr txoff
 
-irqhs     lda ACIA+1
-#ifndef OLDROM
-	  lda #E_OK
+irqhs     lda ACIA+ACIA_SR
+	  lda #E_OK		; irq source removed
 	  rts
-irqend    lda #E_NOIRQ
+irqend    lda #E_NOIRQ		; no irq source found
 	  rts
-#else
-irqend    rts
-#endif
+
+endsend
+	lda ACIA+ACIA_CMD
+	and #%11110011
+	sta ACIA+ACIA_CMD
+	jmp irqhs
+
           .)
 
-irqser2   .(
-          lda ACIA2+1
-          bpl irqend
-          tay
-          bit status+1
-          bpl tx
-          and #%00001000
-          beq nobyt
-          ldx outstr+1
-          lda ACIA2
-          jsr PUTC
-          bcs test
+rtshi
+	lda status,x
+	ora #%00100000
+	sta status,x
+	rts
 
-nobyt     ldx outstr+1
-          lda #SC_STAT
-          jsr STRCMD
-test      bcc tx
-          cmp #E_NUL
-          bne tstwater
-          jsr rxoff
-          jmp tx
-tstwater  cmp #E_SEMPTY
-          beq wl
-          cmp #E_SFULL
-          beq wh
-          cmp #E_SHWM
-          bne twl
-wh        jsr rts2hi
-          bcc tx         ; unbedingt
-twl       cmp #E_SLWM
-          bne tx
-wl        lda PIA2+PIA_CRA
-          and #%11110111
-          sta PIA2+PIA_CRA
-
-tx        bit status+1
-          bvc irqhs
-          tya
-          and #%01010000
-          eor #%00010000
-          bne irqhs
-          ldx instr+1
-          jsr GETC
-          bcs test2
-          sta ACIA2
-          bcc irqhs
-test2     cmp #E_EOF
-          bne irqhs
-          jsr txoff
-
-irqhs     lda ACIA2+1
-#ifndef OLDROM
-	  lda #E_OK
-	  rts
-irqend    lda #E_NOIRQ
-	  rts
-#else
-irqend    rts
-#endif
-          .)
+rtslo
+	lda ACIA+ACIA_CMD
+	ora #%00000100
+	sta ACIA+ACIA_CMD
+	lda status,x
+	and #%11011111
+	sta status,x
+	rts
 
 others    cmp #DC_GS
           bne o1
@@ -262,6 +214,7 @@ o1        cmp #DC_PS
 okx       jmp ok
 o2        cmp #DC_RX_ON
           bne o3
+	jsr rtslo
           lda #DC_SW_RX
           bne o2a
 o3        cmp #DC_TX_ON
@@ -284,12 +237,10 @@ rxoff     ldx dev
           lda status,x
           and #255-DC_SW_RX
           sta status,x
-          txa
-          beq rx1off
-          jsr rts2hi
-          bcc okx
-rx1off    jsr rts1hi
-          bcc okx
+
+rx1off    ;jsr rts1hi
+          ;bcc okx
+	jmp okx
 devoffx   jmp  devoff
 o5        cmp #DC_TX_OFF
           bne o6
@@ -321,17 +272,11 @@ o6a       cmp #DC_SPD
           tya
           and #%00001111
           sta div
-          ldx dev
-          bne o6b
-          lda ACIA+3
+
+          lda ACIA+ACIA_CTRL
           and #%11110000
           ora div
-          sta ACIA+3
-          jmp ok
-o6b       lda ACIA2+3
-          and #%11110000
-          ora div
-          sta ACIA2+3
+          sta ACIA+ACIA_CTRL
           jmp ok
 
 o7        cmp #DC_ST
@@ -344,11 +289,8 @@ o7        cmp #DC_ST
           lda status,x
           ora #2
           sta status,x
-          txa
-          bne o8a
-          sta ACIA+1
-          beq ok
-o8a       sta ACIA2+1
+          sta ACIA+ACIA_SR	; programmed reset
+	  bne ok
           
 ok        lda #E_OK
           .byt $2c

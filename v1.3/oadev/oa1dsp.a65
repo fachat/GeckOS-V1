@@ -97,6 +97,9 @@ spi4      ldx outstr
 spi5      cmp #E_NUL
           beq rxoff
 spi1      clc
+#ifndef OLDROM
+	lda #E_NOIRQ
+#endif
           rts
 
 sp2       cmp #DC_RX_OFF

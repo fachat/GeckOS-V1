@@ -111,6 +111,8 @@
 #define   E_FNOFIL  <-22
 #define   E_FWPROT  <-23
 
+#define	  E_NOIRQ   <-32      /* irq routine has not removed irq source */
+
 #define   E_CMD     <-65
 #define   E_Q       <-66
 #define   E_GT      <-67

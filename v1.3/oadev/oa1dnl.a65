@@ -67,6 +67,9 @@ spiln     iny
           cpy #ANZINSTR
           bcc spil
           clc
+#ifndef OLDROM
+	lda #E_NOIRQ
+#endif
           rts
 
 sp2       cmp #DC_RX_OFF
