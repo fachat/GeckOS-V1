@@ -224,4 +224,10 @@ to be copied into a save area on context switch (i.e. $80-$ff is system,
 $00-$7f for task, the stack is copied only when a real task change takes
 place). This now allows more than 5 tasks in systems without MMU.
 
+******** OS/A 1.3.9a ******** 19oct1996 A.Fachat
+
+Optimized UART 16550A driver. Now works for 9600 baud (if not much other
+work to do). Then we still loose characters. Running SLIP with 19200
+crashes the system :-(
+
 
