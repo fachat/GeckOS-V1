@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -362,8 +362,12 @@ endloopx  bcs endloop
           tax
           lda #DC_RX_ON
           jsr DEVCMD
+#ifdef CMOSCPU
+	  plx
+#else
           pla
           tax
+#endif
           lda #DC_TX_ON
           jsr DEVCMD
 
@@ -519,53 +523,34 @@ pre5      adc #1:bne pre5
 +pnmi
 #ifdef C64NMIRESET
 	jmp RESET
++ctrlnmi
 +setnmi lda #E_NOTIMP
         sec
         rts
 #else
-/*
 #ifdef  NOMMU     
 #ifdef  NMIDEV
-#ifdef CMOSCPU
-	pha
-	phy
-	phx
-#else
-          pha
-          tya
-          pha
-          txa
-          pha
-#endif
-          cld
-*/
-;          jsr x
-;          jmp yendirq
-;x         
 	  jmp (nmiadr)
           
 nmiadr    =sysmem
--sysmem   +=2
+nmistate  =sysmem+2
+-sysmem   +=3
 
 &ininmi   ;lda #<zend
           ;ldy #>zend
-	  lda #<yendnmi
+	  lda #NMI_ON
+	  sta nmistate
+ininmi2	  lda #<yendnmi
 	  ldy #>yendnmi
 n1        sta nmiadr
           sty nmiadr+1
           clc
 zend      rts
 
-yendnmi
-/*
-	  pla
-          tax
-          pla
-          tay
-          pla
-*/
-	  ;bit C64CIA2+CIA_ICR	; clear NMI
-          rti
+	  ; struct for CTRLNMI
+	  .word $ffff
+	  .word zend
+yendnmi   rti
 
 +setnmi   jsr memsys
           bcc n2
@@ -576,21 +561,95 @@ yendnmi
 	  pha
 	  txa
           jsr n1
+
+	lda nmiadr
+	sec
+	sbc #2
+	sta tmp2
+	lda nmiadr+1
+	sbc #0
+	sta tmp2+1
+	lda nmistate
+	jsr c2
+
 	  pla
 	  tay
 	  pla
-          bcc ne
-n2        jsr ininmi
+          jmp ne
+n2        jsr ininmi2
 ne        jsr memtask
           rts        
+
+tmp	=syszp
+tmp2	=syszp+2
+-syszp	+=4
+cmd	=sysmem
+-sysmem	+=1
+
++ctrlnmi 
+	jsr memsys
+	sta cmd 
+	tya
+	pha
+	txa
+	pha
+
+	lda nmiadr
+	ldx nmiadr+1
+
+ctrl0	sec
+	sbc #4
+	sta tmp
+	txa
+	sbc #0
+	sta tmp+1
+
+	ldy #2
+	lda (tmp),y
+	sta tmp2
+	iny
+	lda (tmp),y
+	sta tmp2+1
+
+	lda cmd
+	jsr c2
+
+	ldy #0
+	lda (tmp),y	
+	sta tmp2
+	iny
+	lda (tmp),y
+	sta tmp2+1
+	and tmp2
+	cmp #$ff		; address $ffff ?
+	beq ce
+	lda (tmp2),y
+	tax
+	dey
+	lda (tmp2),y
+	jmp ctrl0
+
+ce	clc
+	pla
+	tax
+	pla
+	tay
+	lda cmd
+	jsr memtask
+	rts
+
+c2	jmp (tmp2)
+
 #else
           rti
++ctrlnmi
 +setnmi   lda #E_NOTIMP
           sec
           rts
 #endif
 #else
           rti
++ctrlnmi
 +setnmi   lda #E_NOTIMP
           sec
           rts

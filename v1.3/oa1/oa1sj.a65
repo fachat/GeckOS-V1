@@ -76,6 +76,7 @@ SIGNAL    jmp signal
 XRECEIVE  jmp xreceive
 
 SETNMI    jmp setnmi
+CTRLNMI	  jmp ctrlnmi
 
 PUTB	  jmp putb
 GETB	  jmp getb
@@ -132,9 +133,10 @@ SIGNAL    =$f069
 XRECEIVE  =$f06c
 
 SETNMI    =$f06f
+CTRLNMI   =$f072
 
-PUTB	  =$f072
-GETB	  =$f075
+PUTB	  =$f075
+GETB	  =$f078
 
 #endif
 

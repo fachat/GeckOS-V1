@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -509,6 +509,10 @@ endloop   jmp loop
 /**************************************************************************/
 
 savebuf   .(
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
           jsr setfpar
           clc
           ldy #F_BYT
@@ -528,6 +532,10 @@ lb1       tay
           bcc lb1
 lbe       php
           jsr UNLISTEN
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           plp
           rts
           .)
@@ -535,6 +543,10 @@ lbe       php
 loadbuf   .(
 dirtst    =sysmem
 -sysmem   +=1
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
           ldy #F_FL
           lda (fzei),y
           cmp #F_FL_DIR
@@ -555,6 +567,10 @@ lbe       php
           ldy #F_LEN
           sta (fzei),y
           jsr UNTALK
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           plp
           rts
 loadirbuf jsr setfpar
@@ -691,6 +707,10 @@ gdx       ldy #FS_DIR_NAME
           sta (fzei),y
 gdy       php
           jsr UNTALK
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           plp
           rts
 
@@ -837,11 +857,19 @@ xx2       tya
 rxe2a     bcs rxe2b
           jsr DISKST
           bcs rxe2a
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
           jsr TALK
           jsr SECTALK
           jsr IECIN
           jsr IECIN
           jsr UNTALK
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
           lda #0
           ldy #F_DRV     
           sta (fzei),y
@@ -1160,15 +1188,29 @@ status    =sysmem+3
 &&SETFPAR  stx devadr
           sty secadr
           rts
-&&IECLOSE  jsr LISTEN
+&&IECLOSE  
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
+	  jsr LISTEN
           lda secadr
           and #$ef
           ora #$e0
           jsr seclisten
           jsr UNLISTEN
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           clc
           rts
-&&IECOPEN  lda #0
+&&IECOPEN  
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
+	  lda #0
           sta status
           jsr LISTEN
 ;lda status:;sta $e000
@@ -1198,13 +1240,27 @@ op1       lda (namzei),y
 nonam     jsr UNLISTEN
 
 ;inc $d020
-          clc
-          rts
+          ;clc
+          ;rts
+	  lda #E_OK
+	  .byt $2c
 opend     lda #E_NODEV
-          sec
+          ;sec
+#ifdef NMIDEV
+	pha
+	lda #NMI_ON
+	jsr CTRLNMI
+	pla
+#endif
+	cmp #1
           rts
           
-&&DISKST   lda #0
+&&DISKST   
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
+	  lda #0
           sta status
           jsr TALK
           lda #$6f
@@ -1232,6 +1288,10 @@ lx        sec
 ;pla
 ;tay 
           jsr UNTALK
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           plp
           rts
           .)
