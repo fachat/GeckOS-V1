@@ -158,9 +158,11 @@
 #define	TE_RESET	<-3	/* connection reset by peer */
 #define	TE_PERMISSION	<-4	/* permission denied */
 #define	TE_FIN		<-5	/*  */
+#define	TE_CLEANUP	<-6	/* clean up connection buffers etc */
+#define	TE_CLOSE	<-6	/* clean up connection buffers etc */
 
-#define	TE_RESET0	6
-#define	TE_RESET1	7
-#define	TE_RESET2	8
-#define	TE_RESET3	9
+#define	TE_RESET0	TE_RESET
+#define	TE_RESET1	TE_RESET
+#define	TE_RESET2	TE_RESET
+#define	TE_RESET3	TE_RESET
 

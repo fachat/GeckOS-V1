@@ -158,21 +158,33 @@ wrongesc
 &queueslot .(	; queue slot XR for output
 	ldy onslot
 	cpy #MAXOQUEUE
-	bcs drop
+	bcc drop1
+jmp drop:drop1
 	txa
 	sta oslot,y
 	inc onslot
 
-jsr getbadr:bcc lll1:DB("illegal slot in queueslot!^m^j"):lll1
-#if 0
+/*jsr getbadr:bcc lll1:DB("illegal slot in queueslot!^m^j"):lll1*/
+#if 1
 px = syszp
 -syszp +=2
-DB("Sent packet:^m^j")
+DB("Sent: sl=")
+txa:jsr EHexout
+DB(" a=")
 jsr getbadr
 sta px:sty px+1
-jsr getblen
-ldx #px
-jsr printpacket2
+ldy #TCP_OFFSET+TH_ACK+2
+lda (px),y:jsr EHexout:iny:lda (px),y:jsr EHexout
+DB(" s=")
+ldy #TCP_OFFSET+TH_SEQ+2
+lda (px),y:jsr EHexout:iny:lda (px),y:jsr EHexout
+DB(" f=")
+ldy #TCP_OFFSET+TH_FLAG
+lda (px),y:jsr EHexout
+DB(" p=")
+lda px+1:jsr EHexout:lda px:jsr EHexout
+
+jsr ECrlfout
 #endif
 	clc
 	rts
