@@ -6,3 +6,14 @@
 
 - the terminal device can leave an inverted space when pressing return
 
+- don't use "." as prefix for decimal values in monitor, but "#"
+
+- Backspace from serial line / vt100 doesn't work on serial line
+
+- in monitor: go command with piped in STDIN doesn't work
+
+- monitor should understand at least the simple CMOS opcodes
+
+- monitor command "e" should allow more than one consecutive exchanges at a 
+  time
+

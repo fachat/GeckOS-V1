@@ -88,11 +88,11 @@ start     =$1000
 
 #define   VA        1
 #define   VB        3
-#define   VC        8
+#define   VC        9
 
 #define   D_Y       96
 #define   D_M       10
-#define   D_D       19
+#define   D_D       20
 
 #else
 

@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -415,8 +415,12 @@ sl3       inx
           sta PCBUF,x
           bne sl3
           inx
+#ifdef CMOSCPU
+	  phx
+#else
           txa
           pha
+#endif
 #else
           lda #0
           sta PCBUF+FORK_NAME
@@ -431,8 +435,12 @@ sl3       inx
           lda (pz),y
           sta PCBUF+FORK_ADR+1
 
+#ifdef CMOSCPU
+	  ply
+#else
           pla
           tay
+#endif
           jsr FORK
 
           ldx s1
@@ -518,11 +526,17 @@ pre5      adc #1:bne pre5
 
 #ifdef  NOMMU     
 #ifdef  NMIDEV
+#ifdef CMOSCPU
+	pha
+	phy
+	phx
+#else
           pha
           tya
           pha
           txa
           pha
+#endif
           cld
 
           jsr x
@@ -562,11 +576,18 @@ ne        jsr memtask
           .)
 
           .(
-+pirq     pha
++pirq     
+#ifdef CMOSCPU
+	pha
+	phy
+	phx
+#else
+	  pha
           tya
           pha
           txa
           pha
+#endif
           cld
 
           tsx
@@ -641,11 +662,18 @@ il        jsr irqdev
           pla
           sta MMU+1
 #endif
-&yendirq  pla
+&yendirq  
+#ifdef CMOSCPU
+	plx
+	ply
+	pla
+#else
+	  pla
           tax
           pla
           tay
           pla
+#endif
           rti
           .)
 

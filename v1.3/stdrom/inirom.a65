@@ -31,7 +31,7 @@
           *=$400
           
 l1        =$0
-
+			 	; exit all devices
           lda #0
           sta l1
 l2        ldx l1
@@ -41,34 +41,34 @@ l2        ldx l1
           lda l1
           cmp #16
           bcc l2
-
+				; disable timer interrupt
           lda SYSPORT
           and #$ff-SYS_IRQEN
           sta SYSPORT
 
-          sei
-          ldx #8
+          sei			; remap MMU pages 8-15 with values from 
+          ldx #8		; 4 to c
 l3        lda $eff4,x
           sta $eff8,x
           dex
           bpl l3
 
-          ldx #1
+          ldx #1		; set MMU pages 1-7 to 1-7
 l4        txa
           sta $eff0,x
           inx
           cpx #$8
           bcc l4
 
-          ldx #0
+          ldx #0		; copy program to valid RAM
 l5        lda data,x
           sta $1000,x
           inx
           bne l5
           
-          jmp $1000
+          jmp $1000		; and jump there
           
-data      lda #0
+data      lda #0		; remap page 0
           sta $eff0
           jmp RESET
 

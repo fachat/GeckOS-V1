@@ -13,6 +13,9 @@ all: rom ibmon mcopy c64 slip rmerr
 rom: 
 	(cd stdrom; ${XA} rom.a65);
 
+inirom: 
+	(cd stdrom; ${XA} inirom.a65);
+
 c64: 
 	(cd c64rom; ${XA} c64rom.a65);
 
