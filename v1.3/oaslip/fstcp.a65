@@ -132,7 +132,9 @@ ok
 
 	/* get free fd */
 	jsr getfd
-	bcs retnofil2
+	bcc noretnofil
+	jmp retnofil
+noretnofil
 	sty fd
 
 	/* interprete received request */
@@ -162,6 +164,7 @@ l1
 	ldy fd
 	lda cmd
 	sta fscmd,y
+	sta PCBUF+FS_OPEN_DRV
 	lda PCBUF+FS_OPEN_STR
 	sta stream,y
 	tya
@@ -182,17 +185,20 @@ l1
 	lda len+1
 	sta (pp),y
 
+DB("cmd=")
+lda cmd:jsr EHexout:lda #":":jsr ECout
+
 	ldy #0
 l2	lda PCBUF,y
 	sta (pd),y
+jsr EHexout:lda #" ":jsr ECout
 	iny
 	cpy len
 	bcc l2
-
+jsr ECrlfout
 	ldx slot
 	jsr tx_queue_packet
 retnomem2 bcs retnomem
-retnofil2 bcs retnofil
 
 	ldy fd
 	lda #F_CMD_SENT
@@ -375,6 +381,7 @@ l0	lda fsqueue,y
 fstcp_signal .(
 inc $d020
 	sta signal
+	jsr tcp_sig_close
 	rts
 	.)
 

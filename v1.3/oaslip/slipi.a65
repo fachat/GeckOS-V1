@@ -47,7 +47,7 @@ iend	=sysmem		;iend	=syszp+8
 	.)
 
 startin .(
-DB("startin")
+/*DB("startin")*/
 	lda #<MTU
 	ldy #>MTU
 	jsr balloc
@@ -64,12 +64,12 @@ DB("startin")
 	tya
 	adc ip+1
 	sta iend+1
-
+#if 0
 DB("iresp: ip=")
 lda ip+1:jsr EHexout: lda ip:jsr EHexout
 lda #":":jsr ECout:lda slotladr:jsr EHexout
 jsr ECrlfout
-
+#endif
 	lda #0
 	sta ist
 	clc
@@ -89,6 +89,12 @@ oops	rts
 	jsr startin
 	bcs ende
 running
+
+ldx islot
+jsr getbadr
+bcc adrok2
+DB("illegal slot# at loopin^m^j")
+adrok2
 	ldx #STDIN
 	jsr GETC
 	bcc gotbyt
@@ -134,10 +140,14 @@ discard
 DB("discard with invalid islot!^m^j")
 	rts
 discok
-DB("discok^m^j")
 	jsr getbadr
+	bcs boom
 	jmp iresp	; no inloop, because if only SL_ENDs are sent, this
 			; would become an almost infinite loop
+boom	DB("illegal slot# in discok^m^j")
+boom1	lda #<-1
+	sta islot
+	rts
 
 gotpacket
 	ldx islot
@@ -152,9 +162,13 @@ gotpacket
 	sta (ip),y
 even
 	jsr getbadr
+	bcc adrok
+	DB("illegal slot# in gotpacket^m^j")
+	jmp boom1
+adrok
 	sta ip
 	sty ip+1
-
+#if 0
 pha:tya:pha
 DB("slot=")
 lda islot:jsr EHexout
@@ -163,7 +177,7 @@ lda ip+1:jsr EHexout: lda ip:jsr EHexout
 lda #":":jsr ECout:lda slotladr:jsr EHexout
 jsr ECrlfout
 pla:tay:pla
-
+#endif
 	cmp iend
 	bne ok
 	cpy iend+1
@@ -215,6 +229,7 @@ jsr ECrlfout
 	beq lenok
 	php
 discp	
+#if 0
 DB("discp: ip=")
 lda ip+1:jsr EHexout:lda ip:jsr EHexout
 DB(" ilen=")
@@ -222,7 +237,7 @@ lda ilen+1:jsr EHexout:lda ilen:jsr EHexout
 DB(" iend=")
 lda iend+1:jsr EHexout:lda iend:jsr EHexout
 jsr ECrlfout
-
+#endif
 	plp
 	jmp discardlen
 lenok
