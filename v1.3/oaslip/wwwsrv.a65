@@ -346,6 +346,8 @@ loop_rxd .(
 	jsr PSEM
 	bcs semerr
 #endif
+	inc sendbuf
+
 	lda #WWW_DRV
 	sta PCBUF+FS_OPEN_DRV
 	lda #0
@@ -426,6 +428,7 @@ send_err
 	tax
 	jsr FRESTR
 strerr	
+	dec sendbuf
 #ifdef NOMMU
 	ldx #SEM_SENDBUF
 	jsr VSEM
@@ -461,10 +464,11 @@ loop_sent .(
 	lda (tcbp),y
 	tax
 	clc
-	jsr XRECEIVE	; strangely enough, XRECEIVE seems to fail here?
+	jsr XRECEIVE
 	bcc gotit
 	rts
 gotit
+	dec sendbuf
 #ifdef NOMMU
 	pha
 	ldx #SEM_SENDBUF
@@ -641,9 +645,8 @@ err	ldy #TCB_WS
 	lda #WS_CLOSED
 	sta (tcbp),y
 
-	;ldx conn
-	lda #TE_FIN
-	jsr tcp_sig_close
+	ldx conn
+	jsr tcp_close
 loop_closed
 loop_free rts
 	.)
@@ -654,17 +657,34 @@ DB("wwwsrv_signal = "):pla:pha:jsr EHexout
 DB(", tcbp="):lda tcbp+1:jsr EHexout:lda tcbp:jsr EHexout:jsr ECrlfout
 pla
 inc $d020
-	cmp #TE_CLEANUP
-	bne ende
+	pha
+
 	ldy #TCB_WS
 	lda (tcbp),y
 	cmp #WS_FSENT
 	bne nosent
+
+	ldy #TCB_WTASK		/* unlock filesystem by receiving msg */
+	lda (tcbp),y
+	tax
+	sec
+	jsr XRECEIVE
+
+	ldy #TCB_WSTR
+	lda (tcbp),y
+	tax	
+	lda PCBUF+FS_X_ERR
+	beq relbuf
+	lda #SC_EOF
+	jsr STRCMD
+relbuf
+	dec sendbuf
 #ifdef NOMMU
 	ldx #SEM_SENDBUF
 	jsr VSEM
 #endif
-	jmp ende
+	jmp checkstr
+
 nosent	cmp #WS_WR_WAIT
 	beq wait
 	cmp #WS_WR_WEOF
@@ -673,10 +693,26 @@ wait	ldy #TCB_WSLOT
 	lda (tcbp),y
 	tax
 	jsr bfree
+nowait	
+checkstr
+	ldy #TCB_WS
+	lda (tcbp),y
+	cmp #WS_FSENT
+	bcc end1
+	cmp #WS_CLOSING
+	bcc end1
+	ldy #TCB_WSTR
+	lda (tcbp),y
+	tax
+	lda #SC_NUL
+	jsr STRCMD
 
-nowait	lda #TE_CLEANUP
-ende
-	jmp tcp_sig_close
+end1	lda #WS_CLOSED
+	ldy #TCB_WS
+	sta (tcbp),y
+
+	pla
+	jmp tcp_signal
 	.)
 
 	.)

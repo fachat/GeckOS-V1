@@ -4,7 +4,7 @@
                               (c) 1997 A. Fachat
 
 
-0) Warning: This code is experimental and very ALPHA! 
+0) Warning: This code is experimental and ALPHA! 
    It has bugs, and may damage files on your computer! 
    The programs are provided "as is", there is no warranty at all,
    and the usual disclaimers apply.
@@ -30,10 +30,12 @@
    I use it on a C64, to transfer files between a PC and a VC1541 disk.
    
    The lowest level you can see is the icmp (internet control message
-   protocol) level. If you ping the OS/A65 computer, it replies.
+   protocol) level. If you "ping" the OS/A65 computer, it replies.
+   See "man ping" on a Unix machine.
 
    Then there are the simple test TCP ports "echo" (7), "discard" (9) and
    "chargen" (19). You can telnet to these ports on the OS/A65 computer.
+   See "man telnet" on how to telnet to a different port.
 
    Another special port is the http port (80). This port is used to 
    transfer html pages for the World Wide Web (WWW). A special server
@@ -95,6 +97,9 @@
    C64's IP address to the interface sl0, which goes to the serial line.
    The small script "csaip", provided in the oaslip directory, does 
    everything.
+   Warning: this script assumes you have network device "sl0" for the
+   OS/A65 link. If you have a SLIP connection somewhere else already.
+   this might not be true! The script then mangles your routing tables!
 
 4) TCP concepts
 
@@ -159,13 +164,10 @@
    from. Do _never_ specify a drive on the fstcp filesystem. The slip prg
    will hang on the first access!
    
-   Watch out: Both WWW server, and FSTCP filesystem must never be used
-   at the same time! This hangs the machine.
-
    To assemble the files, you have to have my 6502 crossassembler "xa" 
    in you path, with version above 2.1.0.
 
-   Then you just can do "make" in the top OS/A65 source directory.
+   Then you just can do "make slip" in the top OS/A65 source directory.
 
 6) running the program
 
@@ -186,7 +188,7 @@
       Never ever run it as root (superuser). 
 
     - Transfer the slip.obj file to a disk accessible to the C64 when running
-      OS/A65
+      OS/A65 (using x1541 cable, for example)
 
     - start OS/A65 on the C64 (see other files, like README.c64)
 
@@ -195,11 +197,16 @@
 
           c:slip.obj <a:ser1 >a:ser1 !a:nuldev &
 
-      This starts the slip client from drive c:, piping the STDIO
+      This starts the slip client from drive c: (usually Commodore serial 
+      IEC device #8, the floppy disk), piping the STDIO
       to the C64 serial line ser1 (in standard C64 OS/A65 it's Daniel 
       Dallmanns 9600 baud interface) and the STDERR to the nulldevice.
+      The ampersand makes the slip program running in the background.
       The slip program receives and sends its SLIP data via STDIO.
-      STDERR prints debugging output.
+      STDERR prints (currently a horrible lot of) debugging output.
+      When you replace the term "nuldev" above with "video3", you can
+      see the debugging output on the third virtual console (switch 
+      between the virtual consoles with the "F1" key.
 
     - The slip client registers a filesystem with one drive. On a
       standard C64 OS/A65 system, it will be drive g:.
@@ -209,33 +216,27 @@
     - You should now be able to ping the C64, and do telnets to the 
       echo, discard and chargen ports.
 
-    - when telneting to the http port (80) (when the FSTCP is disabled
-      and the WWW server is enabled in oaslip/main.a65), you can issue the 
-      "GET" command, followed by an URL on the OS/A65 computer.
+    - when telneting to the http port (80)
+      (When the WWW server is enabled in oaslip/main.a65), you can issue
+      the "GET" command, followed by an URL on the OS/A65 computer.
       You then get the specified file.
+      You can also point your Web browser (netscape) to the C64
+      with the URL "http://192.168.0.13/index.html". Replace the IP
+      number with the one you have chosen for your system.
 
     - It should now also be possible to show the directory of drive g:,
-      and to read files from drive g:
+      and to read files from or write files to drive g:
       This drive will be the contents of the directory given to the fstcp
-      server.
+      server, i.e. on your Unix machine!
 
 7) (Known) Bugs
 
-   - The WWW server _and_ the FSTCP filesystem doesn't work! They both
-     use the somehow too simple SEND/RECEIVE interface. This will only
-     change with kernel 2.*
-
-   - floating invalid TCP packets can irritate the tcp client when looking
-     for a server. Restart the client then.
-
    - The WWW server only understands "GET filename" requests. No "http://"
      or host prefixes are allowed. At least with Netscape it seems to work.
-
-   - Connection Aborts can really confuse the thing. This has improved,
-     but there are still bugs...
 
    - The implementation is bloated, and horribly slow.
 
    - Tons of others, I'm sure
 
+   - connection close can leave occupied TCBs around? I'm not sure. 
 

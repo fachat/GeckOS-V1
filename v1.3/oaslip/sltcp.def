@@ -57,6 +57,8 @@
 #define	TIMER		25	/* makes other times in ca. 1/10 Hz */
 
 #define	TIME_MSL	100	/* 10 seconds ? */
+#define	TIME_LASTACK	200	/* 20 seconds ? */
+#define	TIME_FINW2     200	/* 20 seconds ? */
 #define	TIME_RETRANS	30	/* 3 seconds ? */
 
 #define	MAXCONN		12
@@ -152,17 +154,12 @@
 #define	SFL_MULT	1	/* if set, immediately set up listening  */
 				/* service again on connect */
 
-/* error codes returned to the user */
-#define	TE_NOCONN	<-1	/* illegal connection number */
-#define	TE_CLOSING	<-2	/* connection already closing */
-#define	TE_RESET	<-3	/* connection reset by peer */
-#define	TE_PERMISSION	<-4	/* permission denied */
-#define	TE_FIN		<-5	/*  */
-#define	TE_CLEANUP	<-6	/* clean up connection buffers etc */
-#define	TE_CLOSE	<-6	/* clean up connection buffers etc */
+/* signal codes for user_signal */
+#define	TE_SIG_TERM	<-1	/* connection terminates (RST receveived) */
+#define	TE_SIG_FIN	<-2	/* FIN received */
+#define	TE_SIG_RESET	<-3	/* RST received in SYNRXD state */
 
-#define	TE_RESET0	TE_RESET
-#define	TE_RESET1	TE_RESET
-#define	TE_RESET2	TE_RESET
-#define	TE_RESET3	TE_RESET
+/* error codes returned to the user */
+#define	TE_NOCONN	<-4	/* illegal connection number */
+#define	TE_CLOSING	<-5	/* connection already closing */
 
