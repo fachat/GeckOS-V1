@@ -48,6 +48,7 @@
 #define FSTCP_SERVER_PORT 	8090
 #endif
 
+#define	NO_FSTCP		/* if defined, do not use fstcp */
 
 #define	MAXOQUEUE	4
 #define	INBUF		64
@@ -180,7 +181,9 @@ doloop
 	jsr loopin
 	jsr loopout
 	jsr tcploop
+#ifndef NO_FSTCP
 	jsr fstcp_mloop
+#endif
 	jsr SUSPEND
 	jmp doloop
 

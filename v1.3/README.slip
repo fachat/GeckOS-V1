@@ -199,11 +199,9 @@
 
 7) (Known) Bugs
 
-   - Write to the tcp server doesn't work: the file is opened and the Boom!
-
    - floating invalid TCP packets can irritate the tcp client when looking
      for a server. Then restart the client.
 
-   - Tons of others
+   - Tons of others, I'm sure
 
 

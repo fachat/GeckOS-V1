@@ -52,8 +52,10 @@ chargen_srv
 	lda #<chargen_srv
 	ldy #>chargen_srv
 	jsr tcp_listen
-
-	jmp fstcp_init
+#ifndef NO_FSTCP
+	jsr fstcp_init
+#endif
+	rts
 	.)
 
 rx_queue_packet .(

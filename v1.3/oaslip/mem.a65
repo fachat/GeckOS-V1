@@ -276,12 +276,16 @@ pla:tax:plp
 &bfree2
 	cpx #MAXSLOT
 	bcc okfree
-	DB("bfree: illegal slot#^m^j")
+	DB("bfree: illegal slot#, retadr=")
+	txa:pha:tsx:lda $0103,x:jsr EHexout:lda $0102,x:jsr EHexout
+	jsr ECrlfout:pla:tax
 	sec
 	rts
 okfree	lda slotownr,x
 	bne okf1
-	DB("bfree: slot not in use^m^j")
+	DB("bfree: slot not in use, retadr=")
+	txa:pha:tsx:lda $0103,x:jsr EHexout:lda $0102,x:jsr EHexout
+	jsr ECrlfout:pla:tax
 	sec
 	rts
 okf1

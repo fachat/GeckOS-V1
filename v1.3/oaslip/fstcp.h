@@ -42,5 +42,5 @@
 
 #define F_WR            7
 #define F_WR_WAIT       8		/* buffer ready but not (yet) sent */
-#define F_WR_WEOF       8		/* last buffer ready but not (yet) sent */
+#define F_WR_WEOF       9		/* last buffer ready but not (yet) sent */
 

@@ -294,16 +294,22 @@ trysend1
 nowait
 	cmp #F_WR
 	beq l0d
-l0c1	jmp l0c
+l0c1	jmp l0
 l0d
 	ldx fd
 	lda stream,x
 	tax
 	lda #SC_STAT
 	jsr STRCMD
+pha:DB("STAT gives "):pla:pha:jsr EHexout:jsr ECrlfout:pla
 	cmp #E_SFULL
 	beq send
 	cmp #E_SHWM
+	beq send
+	lda #SC_RWANZ
+	jsr STRCMD
+pha:DB("RWANZ gives "):pla:pha:jsr EHexout:jsr ECrlfout:pla
+	cmp #0		; number of writing tasks - last packet!
 	bne l0c1
 send
 	lda #TCP_DOFFSET+FSP_DATA+64
@@ -329,6 +335,7 @@ wrl	jsr GETC
 	bcc wrl
 	lda #E_OK
 wrle	pha
+tya:pha:DB("GETC gives "):tsx:lda $102,x:jsr EHexout:jsr ECrlfout:pla:tay
 	lda pd
 	sec
 	sbc #FSP_DATA
@@ -357,13 +364,10 @@ w1	tya
 w2	jsr btrunc
 
 	ldy #0
-	lda pdl
-	clc
-	adc #TCP_DOFFSET
+	lda #<TCP_DOFFSET
 	sta (pp),y
 	iny
-	lda #0
-	adc #0
+	lda #>TCP_DOFFSET
 	sta (pp),y
 	iny
 	lda pdl
@@ -387,15 +391,24 @@ we2
 	ldx fd
 	sta status,x
 	
-trysend	ldx fd
+	ldx fd
 	lda fsrxb,y
 	tax
 	jsr incownr
 	jsr tx_queue_packet
 	bcs l0c
+	bcc l0e
+trysend
 	ldx fd
-	lda #F_WR
-	sta status,x
+	lda fsrxb,y
+	tax
+	jsr incownr
+	jsr queueslot
+	bcs l0c
+l0e
+	ldx fd
+	;lda #F_WR
+	;sta status,x
 	lda fsrxb,x
 	tax
 	jsr bfree
@@ -403,7 +416,7 @@ trysend	ldx fd
 	ldx fd
 	lda status,x
 	cmp #F_WR_WAIT
-	beq l0c
+	beq l0f
 
 	lda stream,x
 	tax
@@ -411,6 +424,9 @@ trysend	ldx fd
 	jsr STRCMD
 
 	lda #F_FREE
+	.byt $2c
+l0f	lda #F_WR
+
 	ldy fd
 	sta status,y
 	
@@ -609,6 +625,11 @@ disc	ldx fsqueue
 	jsr bfree
 	jmp nextbuf
 noilllen
+DB("pkt type ")
+ldy #FSP_CMD:lda (pd),y:jsr EHexout
+DB(", fd="):lda fd:jsr EHexout
+DB(", st="):ldy fd:lda status,y:jsr EHexout:jsr ECrlfout
+
 	ldy #FSP_CMD
 	lda (pd),y
 	cmp #FS_REPLY

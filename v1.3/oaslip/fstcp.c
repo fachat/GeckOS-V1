@@ -89,7 +89,8 @@ void do_cmd(char *buf, int fd) {
 	fp = files[tfd].fp;
 	dp = files[tfd].dp;
 
-	printf("got cmd=%d, fd=%d, name=%s\n",cmd,tfd,buf+FSP_DATA);
+	printf("got cmd=%d, fd=%d, name=%s\n",cmd,tfd,
+			cmd<FS_ASSIGN?buf+FSP_DATA:"null");
 
 	retbuf[FSP_CMD] = FS_REPLY;
 	retbuf[FSP_LEN] = 4;

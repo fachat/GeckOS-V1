@@ -469,7 +469,7 @@ tcp_else .(
 
 	lda #0
 	sta needack
-
+/*
 DB("tcp_*: ip=")
 lda pp+1:jsr EHexout:lda pp:jsr EHexout
 DB(", qslot=")
@@ -477,7 +477,7 @@ lda pslot:jsr EHexout
 DB(", sla=")
 lda slotladr:jsr EHexout
 jsr ECrlfout
-
+*/
 	/* first, check sequence number */
 	jsr checkseq
 	bcc seqok
@@ -561,7 +561,7 @@ nosyn	/* fifth, check the ack bit */
 ackok
 	jsr checkack
 	sta tmp
-DB("checkack returns "): lda tmp: jsr EHexout: jsr ECrlfout
+/*DB("checkack returns "): lda tmp: jsr EHexout: jsr ECrlfout*/
 
 	lda state
 	cmp #TCP_SYNRXD
@@ -867,7 +867,7 @@ noend2
 	ldy #TCB_TXBUF
 	lda (tcbp),y
 	tax
-pha: DB("slot:"): pla: jsr EHexout: lda #":": jsr ECout
+/*pha: DB("slot:"): pla: jsr EHexout: lda #":": jsr ECout*/
 	jsr getbadr
 	bcc adrok
 	DB("illegal slot# in ackxmit^m^j")
@@ -1141,12 +1141,12 @@ adrok
 
 	lda phl
 	sta myhl
-
+/*
 DB("got buffer slot ")
 lda myslot: jsr EHexout: DB(" @ address ")
 lda myp+1: jsr EHexout: lda myp: jsr EHexout
 jsr ECrlfout
-
+*/
 	ldy #0
 l0	lda (pp),y
 	sta (myp),y
@@ -1566,7 +1566,9 @@ l1	ldy #TCB_NTXBUF
 #include "tutil.a65"
 #include "tcpuser.a65"
 #include "tcpsrv.a65"
+#ifndef NO_FSTCP
 #include "fstcp.a65"
+#endif
 
 	.)
 
