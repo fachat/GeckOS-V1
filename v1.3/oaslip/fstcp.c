@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.12
+    OS/A65 Version 1.3.13
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1997 Andre Fachat 
@@ -75,6 +75,7 @@ void usage(void) {
 void do_cmd(char *buf, int fd) {
 	int tfd, cmd, len;
 	char retbuf[200];
+	char *nm;
 	FILE *fp;
 	DIR *dp;
 	int n;
@@ -96,14 +97,29 @@ void do_cmd(char *buf, int fd) {
 	retbuf[FSP_DATA] = -22;
 
 	switch(cmd) {
+	case FS_OPEN_WR:
+		/* no directory separators - security rules! */
+		nm = buf+FSP_DATA;
+		if(*nm=='/') n++;
+		if(strchr(nm, '/')) break;
+
+		fp = fopen(nm, "wb");
+printf("OPEN_WD(%s)=%p\n",buf+FSP_DATA,fp);
+		if(fp) {
+		  files[tfd].fp = fp;
+		  files[tfd].dp = NULL;
+		  retbuf[FSP_DATA] = 0;
+		}
+		break;
 	case FS_OPEN_DR:
 		dp = opendir("." /*buf+FSP_DATA*/);
-printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,dp);
+printf("OPEN_DR(%s)=%p\n",buf+FSP_DATA,dp);
 		if(dp) {
 		  files[tfd].fp = NULL;
 		  files[tfd].dp = dp;
 		  retbuf[FSP_DATA] = 0;
 		}
+		break;
 	case FS_OPEN_RD:
 		/* no directory separators - security rules! */
 		if(strchr(buf+FSP_DATA, '/')) break;

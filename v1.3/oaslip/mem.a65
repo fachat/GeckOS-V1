@@ -287,7 +287,7 @@ okfree	lda slotownr,x
 okf1
 /*	DB("bfree(")*/
 
-#if 1 /*def DEBUGMEM*/
+#if 0 /*def DEBUGMEM*/
 DB("Freeing Slot ")
 txa:jsr EHexout:DB(", #ownr="):lda slotownr,x:jsr EHexout:
 DB(", retadr="):txa:pha:tsx:lda $103,x:jsr EHexout:lda $102,x:jsr EHexout

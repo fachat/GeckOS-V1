@@ -9,7 +9,7 @@ The source is copyrighted by Andre Fachat and is released under the
 GNU public license. See the file COPYING for more details.
 
 To build the binaries, a 6502 cross compiler has to be used. The source
-is written to work with my 'xa' (version 2.0.7d), see my WWW page for the
+is written to work with my 'xa' (version > 2.1.0), see my WWW page for the
 source (it's under GNU public license).
 
 To compile, you have to put xa into the path. A simple "make" should

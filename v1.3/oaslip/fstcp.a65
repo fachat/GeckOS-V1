@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.12
+    OS/A65 Version 1.3.13
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1997 Andre Fachat
@@ -42,10 +42,12 @@ fsqueue	=sysmem
 -sysmem	+=MAXQUEUE
 fsnq	=sysmem
 signal	=sysmem+1
--sysmem	+=2
+fsconn	=sysmem+2
+fscnt	=sysmem+3
+-sysmem	+=4
 
 fstcp_srv 
-        .byte 192,168,0,1, 31, 154, 0,0, 0
+        .byte FSTCP_SERVER_IP, >FSTCP_SERVER_PORT, <FSTCP_SERVER_PORT, 0,0, 0
         .word fstcp_queue-1, fstcp_loop-1, fstcp_signal-1
 
 &fstcp_init .(
@@ -81,11 +83,30 @@ l0	sta status,y
 	lda #0
 	sta fsnq
 
+	lda #<-1
+	sta fsconn
+	sta fscnt
+
         lda #<fstcp_srv
         ldy #>fstcp_srv
         jsr tcp_open
-
+	bcs openerr
+	stx fsconn
+openerr
 	rts
+	.)
+
+&&&fstcp_mloop .(	/* called from mainloop */
+	lda fsconn	/* if negative, everything is cleared up */
+	bpl ok
+	dec fscnt	/* not give too much load when retrying */
+	bne ok
+	lda #<fstcp_srv
+	ldy #>fstcp_srv
+	jsr tcp_open	/* reopen */
+	bcs ok
+	stx fsconn
+ok	rts
 	.)
 
 fstcp_queue .(
@@ -103,10 +124,15 @@ foops	sec
 	.)
 
 fstcp_loop .(
+	ldy #TCB_STATE
+	lda (tcbp),y
+	cmp #TCP_ESTAB
+	bne looperr
+
 	jsr rxloop
 	jsr qloop
 	jsr dloop
-	rts
+looperr	rts
 	.)
 
 task	=sysmem
@@ -170,7 +196,7 @@ rd1	cmp #F_RD_RXD
 	beq rdrx
 	cmp #F_RD_CLOSE
 	beq rdclose
-	jmp tx1
+	jmp write
 rdrx
 	lda fsrxb,x
 	tax
@@ -259,7 +285,136 @@ n0 	lda len
 n1	dec len
 	jmp datloop
 
-tx1	jmp l0
+write	cmp #F_WR_WAIT
+	beq trysend1
+	cmp #F_WR_WEOF
+	bne nowait
+trysend1
+	jmp trysend
+nowait
+	cmp #F_WR
+	beq l0d
+l0c1	jmp l0c
+l0d
+	ldx fd
+	lda stream,x
+	tax
+	lda #SC_STAT
+	jsr STRCMD
+	cmp #E_SFULL
+	beq send
+	cmp #E_SHWM
+	bne l0c1
+send
+	lda #TCP_DOFFSET+FSP_DATA+64
+	ldy #0
+	jsr balloc
+	bcs l0c1
+	txa
+	ldy fd
+	sta fsrxb,y
+	lda #TCP_DOFFSET+FSP_DATA
+	jsr getpinfo
+	bcs l0c1
+
+	ldx fd
+	lda stream,x
+	tax
+	ldy #0
+wrl	jsr GETC
+	bcs wrle
+	sta (pd),y
+	iny
+	cpy #64
+	bcc wrl
+	lda #E_OK
+wrle	pha
+	lda pd
+	sec
+	sbc #FSP_DATA
+	sta pd
+	bcs w1
+	dec pd+1
+w1	tya
+	clc
+	adc #FSP_DATA
+	sta pdl
+	ldy #FSP_LEN
+	sta (pd),y
+	lda fd
+	ldy #FSP_FD
+	sta (pd),y
+
+	ldx fd
+	lda fsrxb,x
+	tax
+	lda pdl
+	ldy #0
+	clc
+	adc #TCP_DOFFSET
+	bcc w2
+	iny
+w2	jsr btrunc
+
+	ldy #0
+	lda pdl
+	clc
+	adc #TCP_DOFFSET
+	sta (pp),y
+	iny
+	lda #0
+	adc #0
+	sta (pp),y
+	iny
+	lda pdl
+	sta (pp),y
+	iny
+	lda #0
+	sta (pp),y
+
+	pla
+	cmp #E_EOF
+	beq wend
+	ldx #F_WR_WAIT
+	lda #FS_WRITE
+	bne we2
+wend	ldx #F_WR_WEOF
+	lda #FS_EOF
+we2
+	ldy #FSP_CMD
+	sta (pd),y
+	txa
+	ldx fd
+	sta status,x
+	
+trysend	ldx fd
+	lda fsrxb,y
+	tax
+	jsr incownr
+	jsr tx_queue_packet
+	bcs l0c
+	ldx fd
+	lda #F_WR
+	sta status,x
+	lda fsrxb,x
+	tax
+	jsr bfree
+
+	ldx fd
+	lda status,x
+	cmp #F_WR_WAIT
+	beq l0c
+
+	lda stream,x
+	tax
+	lda #SC_NUL
+	jsr STRCMD
+
+	lda #F_FREE
+	ldy fd
+	sta status,y
+	
+l0c	jmp l0
 	.)
 
 /****************************************************************************
@@ -329,18 +484,18 @@ l1
 	iny
 	lda len+1
 	sta (pp),y
-
+/*
 DB("cmd=")
 lda cmd:jsr EHexout:lda #":":jsr ECout
-
+*/
 	ldy #0
 l2	lda PCBUF,y
 	sta (pd),y
-jsr EHexout:lda #" ":jsr ECout
+/*jsr EHexout:lda #" ":jsr ECout*/
 	iny
 	cpy len
 	bcc l2
-jsr ECrlfout
+/*jsr ECrlfout*/
 	ldx slot
 	jsr tx_queue_packet
 retnomem2 bcs retnomem
@@ -354,7 +509,7 @@ retnomem2 bcs retnomem
 #ifndef NOMMU
 	ldx #SEM_SENDBUF
 	jsr VSEM
-DB("free'd SEM_SENDBUF^m^j")
+/*DB("free'd SEM_SENDBUF^m^j")*/
 #endif
 	
 	lda #E_OK
@@ -398,7 +553,7 @@ gotone
 	jsr getbadr
 	sta pp
 	sty pp+1
-
+/*
 DB("pp=")
 lda pp+1:jsr EHexout: lda pp:jsr EHexout
 DB(" do=")
@@ -410,7 +565,7 @@ ldy #2: lda (pp),y: jsr EHexout
 DB(" slot=")
 lda fsqueue:jsr EHexout
 jsr ECrlfout
-
+*/
 	ldy #0
 	lda (pp),y
 	clc
@@ -483,6 +638,7 @@ DB("didn't get SEM_SENDBUF^m^j")
 sec
 	rts
 gotbuf
+/*
 DB("got SEM_SENDBUF^m^jpd=")
 lda pd+1:jsr EHexout:lda pd:jsr EHexout
 DB(", retval=")
@@ -490,6 +646,7 @@ ldy #FSP_DATA:lda (pd),y:jsr EHexout
 DB(", fscmd=")
 ldy fd:lda fscmd,y:jsr EHexout
 jsr ECrlfout
+*/
 #endif
 	ldy #FSP_DATA
 	lda (pd),y
@@ -592,16 +749,18 @@ l0	lda fsqueue,y
  * process signal from tcp
  */
 fstcp_signal .(
-inc $d020
 	sta signal
+#if 0
 	DB("fstcp_signal: ")
 	lda signal: jsr EHexout
 	jsr ECrlfout
+#endif
 	jsr tcp_sig_close
 
 	ldx #0
 	stx fd
 l0	lda status,x
+	beq next
 	cmp #F_RD
 	bcc next
 	cmp #F_RD_RXD
@@ -621,17 +780,47 @@ rdc1	ldx fd
 	tax
 	lda #SC_EOF
 	jsr STRCMD
+	jmp nextfree
+
+write	cmp #F_WR
+	beq wrc
+	cmp #F_WR_WAIT
+	beq w1
+	cmp #F_WR_WEOF
+	bne next
+w1
+	ldx fd
+	lda fsrxb,x
+	tax
+	jsr bfree
+wrc
+	ldx fd
+	lda stream,x
+	tax
+	lda #SC_NUL
+	jsr STRCMD
+nextfree
 	ldx fd
 	lda #F_FREE
 	sta status,x	
-	jmp next
-
-write
-
+	
 next	inc fd
 	ldx fd
 	cpx #MAXFILES
 	bcc l0
+
+q1	ldy fsnq
+	beq noqueue
+	dey
+	lda fsqueue,y
+	tax
+	jsr bfree
+	dec fsnq
+	jmp q1
+noqueue
+	lda #<-1
+	sta fsconn
+	sta fscnt
 	rts
 	.)
 
