@@ -67,10 +67,18 @@ l1        dec cnt
           jsr testirq
           beq l1
 #else
+#ifdef OLDROM
           jmp l1
+#else
+	  bcs l1	; irq source removed -> ac=0 -> c=0
+#endif
 #endif
 #else
+#ifdef OLDROM
           jmp l1
+#else
+	  bcs l1	; irq source removed -> ac=0 -> c=0
+#endif
 #endif
 dendirq   clc
           rts
