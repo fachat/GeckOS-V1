@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -49,6 +49,10 @@
 #define   TE_SLEN   10
 #endif
 
+#ifndef ST_LEN
+#define	ST_LEN	128
+#endif
+
           .(
 
 #ifndef NOMMU
@@ -91,6 +95,9 @@ i1        jsr setyenv
           inx
           cpx #ANZENV
           bcc i1
+#ifdef STACKCOPY
+	jsr inistack
+#endif
 
           lda #<-1
           ldx #0
@@ -256,7 +263,7 @@ msys      pla
           cld
           rts
 
-#else
+#else		/* NOMMU */
 
 AC        =sysmem
 XR        =sysmem+1
@@ -274,10 +281,15 @@ SSP       =sysmem+6
 
           bit adev       ; Rcksprung in Device
           bpl mtask      ; ja dann Ende
-          
+ 
+
           sty YR         ; sonst Task-Env setzen
           stx XR
           sta AC
+#ifdef STACKCOPY
+	ldx Task
+	jsr setstack
+#endif   
           pla
           sta SR
           pla  
@@ -1082,6 +1094,9 @@ setsp
           rts
 #else
 
+
+#ifndef STACKCOPY
+
 calcbuf = sysmem
 -sysmem +=1
 
@@ -1102,6 +1117,24 @@ calcbuf = sysmem
           sbc #3
           sta Envtab+TE_SP,y
           tay 
+#else			/* STACKCOPY */
+
+	php
+	sei		; an irq can switch contexts!
+
+	pha
+	txa
+	pha
+	lda #ST_LEN-3
+        sta Envtab+TE_SP,y
+
+	ldx xtask
+	jsr setstack
+
+	ldy #ST_LEN-3
+	pla
+	tax
+#endif
           pla
           sec
           sbc #1
@@ -1109,6 +1142,10 @@ calcbuf = sysmem
           txa
           sbc #0
           sta $102,y
+
+#ifdef STACKCOPY
+	plp
+#endif
           
           ldy p1
           lda #TS_RDY
@@ -1680,6 +1717,72 @@ tdx       sec
           jsr memtask
           rts
           .)
-          
+
+#ifdef STACKCOPY
+setstack  .(
+
+p	=syszp
+stask	=syszp+2
+-syszp	+=3
+-sysblk	-=(ANZENV*ST_LEN)
+bstack	=sysblk
+
+	cpx stask
+	bne copy
+	rts
+copy
+	txa
+	pha
+	lda p+1			; p already points to actual stack?
+	beq saved		; if zero than invalid
+
+	ldx stask
+	jsr setyenv
+	lda Envtab+TE_SP,y
+	tay
+	iny
+l0	cpy #ST_LEN
+	bcs saved
+	lda $100,y
+	sta (p),y
+	iny
+	bne l0
+saved
+	pla
+	sta stask
+	tax
+	lsr		
+	tay
+	lda #0
+	bcc sok
+	lda #$80
+sok	clc
+	adc #<bstack
+	sta p
+	tya
+	adc #>bstack
+	sta p+1
+
+	jsr setyenv
+	lda Envtab+TE_SP,y
+	tay
+	iny
+l1	cpy #ST_LEN	
+	bcs ende
+	lda (p),y
+	sta $100,y
+	iny
+	bne l1
+ende
+	rts
+
+&inistack
+	ldx #0
+	stx p+1
+	dex
+	stx stask
+	rts
+	.)       
+#endif   
           .) 
 

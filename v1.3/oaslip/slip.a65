@@ -1,7 +1,7 @@
 
 /****************************************************************************
    
-    OS/A65 Version 1.3.8
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -65,13 +65,13 @@
 #include "stdio.a65"
 
 
-#define	MAXSLOT	8
-#define	IPBUFFER 12*256		/* must be within one (4k) page! */
+#define	MAXSLOT	16
+#define	IPBUFFER 16*256		/* must be within one (4k) page! */
 #define	MTU	1024
 
 /*#define	NOPRG*/
 
-PRGSTART  =$2000
+PRGSTART  =$3000
 
 #ifndef SLIPDEV
 #define	SLIPDEV	0
@@ -149,8 +149,8 @@ PRGSTART  =$2000
 #ifndef NOMMU
 
 syszp     =$80
-sysmem    =$1000
-sysblk    =$2000
+sysmem    =$1800
+sysblk    =$3000
 
 #endif
 

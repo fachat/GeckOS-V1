@@ -412,6 +412,11 @@ i5        lda st,x
           lda PCBUF+TN_MEM,x
           jsr HEXOUT
           jsr SSPOUT
+#ifndef OLDROM
+	  lda PCBUF+TN_SP,x
+	  jsr HEXOUT
+	  jsr SSPOUT
+#endif
           lda PCBUF+TN_STDIN,x
           jsr HEXOUT
           jsr SSPOUT
@@ -437,7 +442,11 @@ ie
 	  .)
           
 st        .asc "FRE ENV IBRKBRK RDY IRQ WFRXWFTXWSEMWTRM"
+#ifdef OLDROM
 it        .asc "^M^JNr Name     Stat kB In OutErr^M^J",0
+#else
+it        .asc "^M^JNr Name     Stat kB SP In OutErr^M^J",0
+#endif
 
 &PKILL    jsr GETADR
           bcs pke
