@@ -62,9 +62,14 @@ phdr	=sysmem
 -sysmem	+=TPH_LEN
 conn	=sysmem
 -sysmem	+=1
+timer	=sysmem
+-sysmem	+=2
 
 &&tcpinit .(
 	ldx #0
+
+	stx timer
+	stx timer+1
 i1
 	jsr settcb
 	lda #TCP_CLOSED
@@ -81,6 +86,24 @@ i1
 	.)
 
 &&tcploop .(
+fl	=sysmem
+-sysmem	+=1
+
+	/* I have - yet - no way to measure the time, so we do a simple loop */
+	lda timer
+	ora timer+1
+	sta fl
+	beq load
+	lda timer
+	bne l1
+	dec timer+1
+l1	dec timer
+	jmp te
+load	lda #<TIMER
+	sta timer
+	lda #>TIMER
+	sta timer+1
+te
 	ldx #<-1
 i1 	inx
 	cpx #MAXCONN
@@ -102,7 +125,57 @@ i1 	inx
 	ldx conn
 	jsr tcp_close	; TODO we should actually signal the user process...
 n1
-same	ldx conn
+same	lda fl
+	bne next
+
+	ldy #TCB_MSL+1
+	lda (tcbp),y
+	dey
+	ora (tcbp),y
+	beq nomsl
+
+	sec
+	lda (tcbp),y
+	sbc #1
+	sta (tcbp),y
+	tax
+	iny
+	lda (tcbp),y
+	sbc #0
+	sta (tcbp),y
+	bne nomsl
+	txa
+	bne nomsl
+	
+	ldy #TCB_STATE
+	lda (tcbp),y
+	cmp #TCP_TIMEW
+	bne nomsl
+	lda #TCP_CLOSED
+	sta (tcbp),y
+nomsl
+	ldy #TCB_RETRANS+1
+	lda (tcbp),y
+	dey
+	ora (tcbp),y
+	beq noretrans
+
+	sec
+	lda (tcbp),y
+	sbc #1
+	sta (tcbp),y
+	tax
+	iny
+	lda (tcbp),y
+	sbc #0
+	sta (tcbp),y
+	bne noretrans
+	txa
+	bne noretrans
+
+	jsr retransmit
+noretrans
+next	ldx conn
 	jmp i1
 	
 end	rts
@@ -611,6 +684,8 @@ ackok2
 	sta (tcbp),y
 	sta state
 
+	/* TODO: check queued FIN */
+
 ack1	lda tmp
 	beq aignore
 	cmp #3
@@ -626,7 +701,8 @@ a1	lda (id),y
 	iny
 	cpy #TH_ACK+4
 	bcc a1
-	/* TODO: flush ack'd packets on retransmission queue */
+
+	jsr ackxmit
 aignore
 	lda state
 	cmp #TCP_FINW1
@@ -656,6 +732,14 @@ ack4	cmp #TCP_CLOSING
 	lda #TCP_TIMEW
 	sta state
 	sta (tcbp),y
+
+	ldy #TCB_MSL
+	lda #<TIME_MSL
+	sta (tcbp),y
+	iny
+	lda #>TIME_MSL
+	sta (tcbp),y
+
 atw	jmp tdiscard
 
 ack5	cmp #TCP_LASTACK
@@ -671,7 +755,21 @@ ack5	cmp #TCP_LASTACK
 
 ack6	cmp #TCP_TIMEW
 	bne do6
-	/* TODO: ack retransmitted FIN and restart MSL timeout */
+
+	ldy #TCB_MSL
+	lda #<TIME_MSL
+	sta (tcbp),y
+	iny
+	lda #>TIME_MSL
+	sta (tcbp),y
+	
+	; ack retransmitted FIN 
+	jsr setack
+	jsr setseq
+	ldy #TH_FLAG
+	lda #THF_ACK
+	sta (id),y
+	jmp bangbuf
 
 	/* sixth, check the URG bit */
 do6
@@ -799,8 +897,103 @@ disc	jmp discard
 tdiscard .(
 	ldx qslot
 	jsr bfree
-	clc
+&end2	clc
 	rts
+	.)
+
+/* check acknowledge of packets in retransmission queue */
+/* TODO: save end pointer for each packet in queue -> no calculations here */
+ackxmit	.(
+DB("ackxmit:")
+.(:ldy #TCB_SND_UNA: x1 lda (tcbp),y: jsr EHexout: iny: cpy #TCB_SND_UNA+4:bcc x1: .)
+lda #":":jsr ECout
+
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	beq end2
+
+	ldy #TCB_TXBUF
+	lda (tcbp),y
+	tax
+pha: DB("slot:"): pla: jsr EHexout: lda #":": jsr ECout
+	jsr getbadr
+	sta p2
+	sty p2+1
+
+	ldx #3
+	ldy #TH_SEQ+TCP_OFFSET+3
+l0	lda (p2),y
+	sta tmp,x
+jsr EHexout
+	dey
+	dex
+	bpl l0
+
+	ldy #IPH_LEN+1
+	lda (p2),y
+	clc
+	adc tmp+3
+	sta tmp+3
+	dey
+	lda (p2),y
+	adc tmp+2
+	sta tmp+2
+	bcc l1
+	inc tmp+1
+	beq l1
+	inc tmp
+l1	lda tmp+3
+	sec
+	sbc #<TCP_OFFSET+TH_OPTIONS
+	sta tmp+3
+	lda tmp+2
+	sbc #>TCP_OFFSET+TH_OPTIONS
+	sta tmp+2
+	bcs l2
+	lda tmp
+	bne l3
+	dec tmp+1
+l3	dec tmp
+l2
+
+lda #":": jsr ECout
+.(:ldy #0: x1 lda tmp,y: jsr EHexout: iny: cpy #4:bcc x1: .)
+jsr ECrlfout
+
+	ldy #TCB_SND_UNA
+l4	lda (tcbp),y
+	cmp tmp-TCB_SND_UNA,y
+	bcc end
+	iny
+	cpy #TCB_SND_UNA+4
+	bcc l4
+
+	; got ack for first packet in queue
+	ldy #TCB_TXBUF
+	lda (tcbp),y
+	tax
+	jsr bfree
+
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	tax
+	dex
+	txa
+	sta (tcbp),y
+	beq end		; ok, end, nothing left
+
+	ldy #TCB_TXBUF
+l5	iny
+	lda (tcbp),y
+	dey
+	sta (tcbp),y
+	iny
+	dex
+	bne l5
+
+	jmp ackxmit
+
+end	rts
 	.)
 
 seqsyn	.(
@@ -1562,6 +1755,44 @@ nobuffer
 	rts
 	.)
 
+/* retransmit the first packet in the retransmission queue */
+&retransmit .(
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	beq ende
+
+	ldy #TCB_TXBUF
+	lda (tcbp),y
+	sta qslot
+	tax
+
+	ldy #TCB_TRIES
+	lda (tcbp),y
+	clc
+	adc #1
+	cmp #6		; retransmit 6 times only ?
+	bcs ende
+	jsr iniretrans
+
+	jsr incownr
+	jsr queueslot
+ende	rts
+	.)
+
+iniretrans .( 
+	ldy #TCB_TRIES
+	sta (tcbp),y
+
+	ldy #TCB_RETRANS
+	lda #<TIME_RETRANS
+	sta (tcbp),y
+	iny
+	lda #>TIME_RETRANS
+	sta (tcbp),y
+
+	rts
+	.)
+
 /* this routine puts outgoing packets into the retransmission queue and sends
  * them. It needs tcbp, and the packet buffer number in x
  */
@@ -1577,6 +1808,30 @@ nobuffer
 	tya
 	adc #0
 	sta qd+1
+
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	cmp #TCP_MAXTXB
+	bcc queueok
+	rts
+queueok
+	adc #1
+	sta (tcbp),y
+	clc
+	adc #TCB_TXBUF-1
+	tay
+	lda qslot
+	sta (tcbp),y
+
+	cpy #TCB_TXBUF
+	bne notime
+
+	lda #1
+	jsr iniretrans
+
+notime
+	ldx qslot
+	jsr incownr
 
 	ldy #0
 	lda (qp),y

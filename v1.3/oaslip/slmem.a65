@@ -29,7 +29,7 @@
 /* 	balloc, bfree, btrunc, bsplit, brealloc			      */
 /*	getbadr, getblen					      */
 
-/*#define	DEBUGMEM*/
+#define	DEBUGMEM
 
 #define	MINBUF	8
 #define	MINMASK	%11111000
@@ -42,8 +42,9 @@ slotllen =sysmem+MAXSLOT*2
 slothlen =sysmem+MAXSLOT*3
 slotrlln =sysmem+MAXSLOT*4
 slotrhln =sysmem+MAXSLOT*5
+slotownr =sysmem+MAXSLOT*6
 
--sysmem	+=MAXSLOT*6
+-sysmem	+=MAXSLOT*7
 
 flist 	=sysmem
 slot	=sysmem+2
@@ -64,6 +65,7 @@ buf	=sysblk
 	tay
 l0	sta slotladr,y
 	sta slothadr,y
+	sta slotownr,y
 	iny
 	cpy #MAXSLOT
 	bcc l0
@@ -93,7 +95,9 @@ l0	sta slotladr,y
 	jsr getbslot
 	pla
 	bcc gotslot
+	DB("balloc: no slot!^m^j")
 	lda #E_NOMEM
+	sec
 	rts
 gotslot
 	stx slot
@@ -188,6 +192,7 @@ jsr ECrlfout
 	sta slotladr,x
 	lda p+1
 	sta slothadr,x
+	inc slotownr,x
 		
 	lda p3 		/* check length */
 	ora p3+1
@@ -267,16 +272,15 @@ plp
 
 /* free buffer (ID=xr) */
 &bfree	.( 
-;clc
-;rts
 &bfree2
 	cpx #MAXSLOT
 	bcc okfree
 	DB("bfree: illegal slot#^m^j")
 	sec
 	rts
-okfree	lda slothadr,x
-	ora slotladr,x
+okfree	lda slotownr,x
+;	lda slothadr,x
+;	ora slotladr,x
 	bne okf1
 	DB("bfree: slot not in use^m^j")
 	sec
@@ -284,26 +288,32 @@ okfree	lda slothadr,x
 okf1
 /*	DB("bfree(")*/
 
+#ifdef DEBUGMEM
+DB("Freeing Slot ")
+txa:jsr EHexout
+lda slothadr,x
+jsr EHexout
+lda slotladr,x
+jsr EHexout: lda #"[": jsr ECout
+lda slothlen,x
+jsr EHexout
+lda slotllen,x
+jsr EHexout
+DB("], own=")
+lda slotownr,x
+jsr EHexout
+jsr ECrlfout
+#endif
+
+	dec slotownr,x
+	bne end2
+
 	lda slothadr,x
 	sta p3+1
 	lda slotladr,x
 	sta p3
 	ora p3+1
 	beq end2
-
-#ifdef DEBUGMEM
-DB("Freeing Slot ")
-txa:jsr EHexout
-lda p3+1
-jsr EHexout
-lda p3
-jsr EHexout
-lda slothlen,x
-jsr EHexout
-lda slotllen,x
-jsr EHexout
-jsr ECrlfout
-#endif
 
 	ldy #2
 	lda slotllen,x
@@ -517,7 +527,8 @@ ok	lda p3
 	sta slotllen,y
 	lda p2+1
 	sta slothlen,y
-	
+
+	inc slotownr,x	
 oknull	
 #ifdef DEBUGMEM
 DB("^m^jsplit buffer @")
@@ -568,13 +579,22 @@ oops	rts
 	rts
 	.)
 
+/* this registers one more user - so one bfree is ignored */
+&incownr .(
+	inc slotownr,x
+	clc
+	rts
+	.)
+
 /* get free buffer-ID slot */
 getbslot .(
 	ldx #0
 l0
 	clc
-	lda slotladr,x
-	ora slothadr,x
+	lda slotownr,x
+	beq found
+;	lda slotladr,x
+;	ora slothadr,x
 	beq found
 	inx
 	cpx #MAXSLOT
@@ -625,7 +645,7 @@ nomerge
 	rts
 	.)
 
-#if 0 /*def DEBUGMEM*/
+#ifdef DEBUGMEM
 &printmem .(
 pac	=sysmem
 pxr	=sysmem+1

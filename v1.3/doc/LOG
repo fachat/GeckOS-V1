@@ -282,7 +282,8 @@ computer with bytes slows it down to near unusability.
 ******** OS/A 1.3.11 ******** jan1997 A.Fachat
 
 Been working on TCP implementation. discard & echo ports work. 
-Also connection closing ceremonies.
+Also connection closing ceremonies. Packet Retransmission works.
+Retransmission timeouts, timewait timeouts work.
 
-TODO: timeouts, active open, retransmission queue, 32-bit-modulo, ...
+TODO: active open, 32-bit-modulo, ...
 

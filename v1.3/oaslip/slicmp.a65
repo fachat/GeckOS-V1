@@ -131,6 +131,9 @@ l0	lda MyIP-IPH_SRC,y
 	lda islot
 	sta qslot
 
+	lda #<-1
+	sta islot
+
 	jmp lx
 
 +sendip
