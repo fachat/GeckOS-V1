@@ -66,12 +66,12 @@
 
 
 #define	MAXSLOT	16
-#define	IPBUFFER 16*256		/* must be within one (4k) page! */
+#define	IPBUFFER 32*256		/* must be within one (4k) page for MMU! */
 #define	MTU	1024
 
 /*#define	NOPRG*/
 
-PRGSTART  =$3000
+PRGSTART  =$4000
 
 #ifndef SLIPDEV
 #define	SLIPDEV	0
@@ -150,7 +150,7 @@ PRGSTART  =$3000
 
 syszp     =$80
 sysmem    =$1800
-sysblk    =$3000
+sysblk    =PRGSTART
 
 #endif
 
@@ -162,6 +162,14 @@ sysblk    =$3000
 /**********************************************************************/
 
 PRG	.(
+
+qp	=syszp
+qd	=syszp+2
+-syszp	+=4
+ql	=sysmem
+qlen	=sysmem+2
+qslot	=sysmem+4
+-sysmem	+=5
 
 	jsr binit
 	bcs exit
@@ -340,13 +348,14 @@ islot	=sysmem
 ist	=sysmem+1	; 0=send data, $80= escaped
 ilen	=sysmem+2
 ihl	=sysmem+4
--sysmem	+=5
+ipl	=sysmem+5
+idlen	=sysmem+7
+-sysmem	+=9
 ip	=syszp
-ipl	=syszp+2
-id	=syszp+4
-idlen	=syszp+6
-iend	=syszp+8
--syszp	+=10
+id	=syszp+2
+-syszp	+=4
+iend	=sysmem		;iend	=syszp+8
+-sysmem	+=2		;-syszp	+=10
 
 &iinit	
 	lda #<-1
@@ -504,15 +513,18 @@ even
 	beq discard	; zero length packet received
 ok
 
-#if 0 /*def DEBUGPKT*/
+#if 1 /*def DEBUGPKT*/
 	/* so what now? */
-DB("Received Packet:^m^j")
+DB("Received Packet: ip=")
+lda ip+1:jsr EHexout:lda ip:jsr EHexout: jsr ECrlfout
+#if 0
 	jsr printpacket
 
 DB("^m^jip=")
 lda ip+1:jsr EHexout:lda ip:jsr EHexout
 DB("^m^jiend=")
 lda iend+1:jsr EHexout:lda iend:jsr EHexout
+#endif
 #endif
 
 	/* sanity checks */
@@ -524,7 +536,7 @@ lda iend+1:jsr EHexout:lda iend:jsr EHexout
 	lda (ip),y
 	sta ilen
 
-#ifdef DEBUGPKT
+#if 0 /*def DEBUGPKT*/
 DB("^m^jiph->len=")
 lda ilen+1
 jsr EHexout
@@ -573,11 +585,12 @@ lenok
 	sbc #0
 	sta idlen+1
 
-	lda #<ip
-	ldy #>ip
-	jsr checksum2
+	lda ipl
+	ldy ipl+1
+	ldx #ip
+	jsr checksum3
 
-#ifdef DEBUGPKT
+#if 0 /*def DEBUGPKT*/
 php
 pha
 txa
@@ -644,6 +657,100 @@ discardlen
 
 	.)
 
+
+	/* computes IP header checksum and returns it in a/x */
+	/* address (a/y) + # of 16 bit words parameter (x) */
+&checksum3 .(
+
+tmp	=sysmem
+len	=sysmem+3
+-sysmem	+=5
+p	=syszp
+-syszp	+=2
+
+	sec
+	sbc #1
+	sta len
+	tya
+	sbc #0
+	sta len+1
+	bcs uf
+	rts
+uf
+	lda 0,x
+	sta p
+	lda 1,x
+	sta p+1
+
+#if 0
+DB("Check: ")
+lda p+1:jsr EHexout: lda p: jsr EHexout:lda #" ": jsr ECout
+lda len+1:jsr EHexout: lda len: jsr EHexout: jsr ECrlfout
+#endif
+	lda #0
+	sta tmp
+	sta tmp+1
+	sta tmp+2
+	ldy #0
+loop	
+	iny
+	lda tmp
+	clc
+	adc (p),y
+	sta tmp
+	lda tmp+1
+	dey
+	adc (p),y
+	sta tmp+1
+	bcc l0
+	inc tmp+2
+l0
+	iny
+	iny
+	bne l1
+	inc p+1
+l1	
+	lda len
+	sec
+	sbc #2
+	sta len
+	bcs l1a
+	lda len+1
+	sbc #0
+	sta len+1
+	bcc loope	; underflow (even size) -> end
+l1a	lda len		
+	ora len+1
+	bne loop
+
+l1b	lda (p),y
+	clc
+	adc tmp+1
+	sta tmp+1
+	bcc loope
+	inc tmp+2
+loope
+	lda tmp
+	clc
+	adc tmp+2
+	pha
+	lda tmp+1
+	adc #0
+	eor #$ff
+	tax
+	pla
+	eor #$ff
+
+	bne err
+	cpx #0
+	bne err
+	clc
+	rts
+err	sec
+	rts
+	.)
+
+#if 0
 	/* computes IP header checksum and returns it in a/x */
 	/* address (a/y) + # of 16 bit words parameter (x) */
 &checksum2 .(
@@ -749,6 +856,7 @@ err	sec
 	rts
 	.)
 
+#endif
 #if 0
 	/* computes IP header checksum and returns it in a/x */
 	/* address (a/y) + # of 16 bit words parameter (x) */
@@ -813,16 +921,18 @@ err	sec
 	.)
 #endif
 
-#if 1 /*def DEBUGPKT*/
+#if 0 /*def DEBUGPKT*/
 printpacket .(
 end 	=sysmem
 -sysmem	+=2
-	ldy #3
+	ldy #0
 	lda (ip),y
+	and #$0f
+	asl
+	asl
+	clc
+	adc #16
 	sta end
-	dey
-	lda (ip),y
-	sta end+1
 
 	ldy #0
 l0
@@ -849,25 +959,27 @@ lend
 	asl
 	asl
 	sta ipl
-	lda #<ip
-	ldy #>ip
-	jsr checksum2
+	lda ipl
+	ldy ipl+1
+	ldx #ip
+	jsr checksum3
 	pha
 	txa
 	jsr EHexout
 	pla
 	jsr EHexout
-
+#if 0
 	DB("^m^jData Checksum")
-	lda #<id
-	ldy #>id
-	jsr checksum2
+	lda idlen
+	ldy idlen+1
+	ldx #id
+	jsr checksum3
 	pha
 	txa
 	jsr EHexout
 	pla
 	jsr EHexout
-
+#endif
 	jsr ECrlfout
 	clc
 	rts

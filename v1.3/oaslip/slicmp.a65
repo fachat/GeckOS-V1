@@ -37,11 +37,12 @@
 
 
 icmp	.(
-	lda #<id
-	ldy #>id
-	jsr checksum2
+	lda idlen
+	ldy idlen+1
+	ldx #id
+	jsr checksum3
 
-#ifdef DEBUGPKT
+#if 0 /*def DEBUGPKT*/
 php
 pha
 txa
@@ -103,99 +104,119 @@ l0	lda MyIP-IPH_SRC,y
 	iny
 	sta (id),y
 
-	lda #<id
-	ldy #>id
-	jsr checksum2
+	lda idlen
+	ldy idlen+1
+	ldx #id
+	jsr checksum3
 
 	ldy #ICMP_CSUM+1
 	sta (id),y
 	dey
 	txa
 	sta (id),y
+
+	lda ip
+	sta qp
+	lda ip+1
+	sta qp+1
+	lda ipl
+	sta ql
+	lda ipl+1
+	sta ql+1
+
+	lda ilen
+	sta qlen
+	lda ilen+1
+	sta qlen+1
+	lda islot
+	sta qslot
+
 	jmp lx
 
 +sendip
-DB("sendip: idlen=")
-lda idlen+1: jsr EHexout: lda idlen: jsr EHexout: jsr ECrlfout
-
 	lda #20
-	sta ipl
+	sta ql
 	clc
-	adc idlen
-	sta ilen
+	adc qlen
+	sta qlen
 	lda #0
-	sta ipl+1
-	adc idlen+1
-	sta ilen+1
+	sta ql+1
+	adc qlen+1
+	sta qlen+1
 
 	ldy #IPH_VER
 	lda #$45
-	sta (ip),y
+	sta (qp),y
 	iny
 	lda #0
-	sta (ip),y
+	sta (qp),y
 	iny
-	lda ilen+1
-	sta (ip),y
+	lda qlen+1
+	sta (qp),y
 	iny
-	lda ilen
-	sta (ip),y
+	lda qlen
+	sta (qp),y
 	iny
 	lda #0
-	sta (ip),y	; ident
+	sta (qp),y	; ident
 	iny
-	sta (ip),y
+	sta (qp),y
 
 	iny		;ldy #IPH_FL
 	lda #0
-	sta (ip),y
+	sta (qp),y
 	iny
-	sta (ip),y
+	sta (qp),y
 
 lx	lda #0
 	ldy #IPH_CSUM
-	sta (ip),y
+	sta (qp),y
 	iny
-	sta (ip),y
+	sta (qp),y
 	ldy #IPH_TTL
 	lda #64
-	sta (ip),y
+	sta (qp),y
 
-	lda #<ip
-	ldy #>ip
-	jsr checksum2
+	lda ql
+	ldy ql+1
+	ldx #qp
+	jsr checksum3
 	ldy #IPH_CSUM+1
-	sta (ip),y
+	sta (qp),y
 	dey
 	txa
-	sta (ip),y
+	sta (qp),y
 
-#if 1 /*def DEBUGSEND*/
+DB("sendip: qp=")
+lda qp+1: jsr EHexout: lda qp: jsr EHexout: jsr ECrlfout
+
+#if 0 /*def DEBUGSEND*/
 DB("^m^jSend packet:^m^j")
 jsr printpacket
 tsx
 txa
 jsr EHexout
 #endif
+#if 0
 DB("trunc packet: slot=")
-lda islot: jsr EHexout
+lda qslot: jsr EHexout
 DB(" at adr=")
-ldx islot: jsr getbadr: pha: tya: jsr EHexout: pla: jsr EHexout
+ldx qslot: jsr getbadr: pha: tya: jsr EHexout: pla: jsr EHexout
 lda #"[": jsr ECout
-ldx islot: jsr getblen: pha: tya: jsr EHexout: pla: jsr EHexout
+ldx qslot: jsr getblen: pha: tya: jsr EHexout: pla: jsr EHexout
 DB("] to len=")
-lda ilen+1: jsr EHexout: lda ilen: jsr EHexout
+lda qlen+1: jsr EHexout: lda qlen: jsr EHexout
 jsr ECrlfout
-
-	ldx islot
-	lda ilen
-	ldy ilen+1
+#endif
+	ldx qslot
+	lda qlen
+	ldy qlen+1
 	jsr btrunc
-	ldx islot
-	jsr queueslot
+
+	ldx qslot
 	lda #<-1
-	sta islot
-	jmp startin
+	sta qslot
+	jmp queueslot
 
 discardics
         DB("Packet discarded: ICMP checksum^m^j")
