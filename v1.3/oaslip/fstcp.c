@@ -1,7 +1,6 @@
-
 /****************************************************************************
    
-    OS/A65 Version 1.3.11
+    OS/A65 Version 1.3.12
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1997 Andre Fachat 
@@ -66,7 +65,7 @@ typedef struct {
 File files[MAXFILES];
 
 void usage(void) {
-	printf("Usage: fstcp [options] exported_directory\n"
+	printf("Usage: fstcp [options] exported_directory hostname_to_export_to\n"
 		" options=\n"
 		"   -ro		export read-only\n"
 	);
@@ -106,6 +105,9 @@ printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,dp);
 		  retbuf[FSP_DATA] = 0;
 		}
 	case FS_OPEN_RD:
+		/* no directory separators - security rules! */
+		if(strchr(buf+FSP_DATA, '/')) break;
+
 		fp = fopen(buf+FSP_DATA, "rb");
 printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 		if(fp) {
@@ -119,6 +121,7 @@ printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 		  de = readdir(dp);
 		  if(!de) {
 		    closedir(dp);
+		    files[tfd].dp = NULL;
 		    retbuf[FSP_CMD] = FS_EOF;
 		    retbuf[FSP_LEN] = 3;
 		    break;
@@ -180,12 +183,13 @@ printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 
 int main(int argc, char *argv[]) {
 	int sock, err;
-	struct sockaddr_in serv_addr, client_addr;
+	struct sockaddr_in serv_addr, client_addr, host_addr;
 	int client_addr_len;
 	int port=PORT;
 	int fd;
 	int i, ro=0;
-	char *dir;
+	char *dir, *hname;
+	struct hostent *he;
 
 	i=1;
 	while(i<argc && argv[i][0]=='-') {
@@ -202,7 +206,7 @@ int main(int argc, char *argv[]) {
 	  i++;
 	}
 
-	if(i!=argc-1) {
+	if(i!=argc-2) {
 	  usage();
 	}
 
@@ -210,10 +214,32 @@ int main(int argc, char *argv[]) {
 	printf("dir=%s\n",dir);
 
 	if(chdir(dir)<0) { 
-	  fprintf("Couldn't change to directory %s, errno=%d (%s)\n",
+	  fprintf(stderr, "Couldn't change to directory %s, errno=%d (%s)\n",
 			dir, errno, strerror(errno));
 	  exit(1);
 	}
+
+	hname= argv[i++];
+	printf("hostname=%s\n",hname);
+
+	he = gethostbyname(hname);
+	if(!he) {
+	  fprintf(stderr, "Could not get hostinfo for %s, h_errno=%d\n",
+			hname, h_errno);
+	  exit(2);
+	}
+	printf("official name is %s\n",he->h_name);
+	if(he->h_addrtype != AF_INET) {
+	  fprintf(stderr, "Address type for %s not Internet!\n", hname);
+	  exit(2);
+	}
+
+	memcpy((char*)&host_addr.sin_addr.s_addr, he->h_addr_list[0], 
+							he->h_length);
+
+/*	host_addr.sin_addr.s_addr = ntohl(*(long*)(he->h_addr_list[0]));*/
+
+	printf("ok, want connection to %08lx\n", host_addr.sin_addr.s_addr);
 
 	for(i=0;i<MAXFILES;i++) {
 	  files[i].state = F_FREE;
@@ -231,7 +257,8 @@ int main(int argc, char *argv[]) {
 
 	err = bind(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr));
 	if(err<0) {
-	  fprintf(stderr, "Could not bind!\n");
+	  fprintf(stderr, "Could not bind (errno=%d, %s)!\n", errno,
+							strerror(errno));
 	  return 2;
 	}
 
@@ -249,7 +276,12 @@ int main(int argc, char *argv[]) {
 						errno, strerror(errno));
 	    return 2;
 	  }
-/*	  if(fork()==0) */ {
+	  printf("accept request from %08lx, port %d, clen=%d, inal=%d\n", 
+			client_addr.sin_addr.s_addr, client_addr.sin_port,
+			client_addr_len, sizeof(struct in_addr));
+
+	  if(!memcmp(&client_addr.sin_addr.s_addr, 
+			&host_addr.sin_addr.s_addr, sizeof(struct in_addr))) {
 	    char buf[8192];
 	    int wrp,rdp, plen;
 	    int n;
@@ -270,7 +302,7 @@ for(i=0;i<n;i++) printf("%02x ",buf[wrp+i]); printf("\n");
 		break;
 	      }
 	      wrp+=n;
-	      if(wrp==8192 && rdp) {
+	      if(rdp && (wrp==8192 || rdp==wrp)) {
 		if(rdp!=wrp) {
 		  memmove(buf, buf+rdp, wrp-rdp);
 		}
@@ -290,6 +322,9 @@ printf("wrp-rdp=%d, plen=%d\n",wrp-rdp,plen);
 	      }
 	    }
 	    exit(0);
+	  } else {
+	    printf("connect trial rejected!\n");
+	    close(fd);
 	  }
 	}
 	
