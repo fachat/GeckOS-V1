@@ -1,0 +1,397 @@
+
+          .(
+devzei    =syszp
+DZ        =syszp+2
+-syszp    +=4
+
+#ifndef NOMMU
++adev     =syszp
+ANZDEV    =syszp+1
+cnt       =syszp+2
+freq      =syszp+3
+hidigit   =syszp+4
+-syszp    +=5
+#else
++adev     =sysmem
+ANZDEV    =sysmem+1
+cnt       =sysmem+2
+freq      =sysmem+3
+-sysmem   +=4
+#endif
+
++DEVTAB   =sysmem
+-sysmem   +=(MAXDEV*DVT_SLEN)
+
++inidev   sta freq
+          ldx #0
+          stx ANZDEV
+          dex
+          stx adev
+          clc
+          rts
+
++irqdev   .(
+          ldx ANZDEV
+          stx cnt
+l1        dec cnt
+          bmi dendirq
+          ldx cnt
+          lda #DC_IRQ
+          ldy freq
+          jsr exejmp
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
+          jsr testirq
+          beq l1
+#else
+          jmp l1
+#endif
+#else
+          jmp l1
+#endif
+dendirq   clc
+          rts
+          .)
+          
++devcmd   php
+          sei
+          jsr memsys
+          cmp #DC_GNUM
+          beq devgnum
+          cmp #DC_REGDEV
+          bne x1
+          jmp regdev
+x1        cpx ANZDEV
+          bcs idcex
+          cmp #DC_GNAM
+          beq devgnam
+          jsr exejmp
+          bcs idce
+idcok     lda #E_OK
+          .byt $2c
+idcex     lda #E_NODEV
+idce      jsr memtask
+          plp
+          cmp #1
+          rts
+
+devgnum   .(
+#ifndef NOMMU
+;          jsr CPTASKSYS
+          jsr cptasksys
+xSYSBUF   =BLKSIZ+PCBUF
+#else
+xSYSBUF   =PCBUF
+#endif
+          ldx #0
+gu1       stx cnt
+          cpx ANZDEV
+          bcs idcex
+          jsr setnam
+          ldx cnt
+gu2       lda (devzei),y
+          cmp xSYSBUF,y
+          bne gun
+          cmp #0
+          beq idcok
+          iny
+          bne gu2
+gun       inx
+          bne gu1
+          .)
+
+setnam    .(
+#ifndef NOMMU
+          txa
+          asl
+          asl
+          tax
+          lda DEVTAB+DVT_BLK,x 
+          sta MMU+2
+          lda DEVTAB+DVT_ADR,x
+          clc
+          adc #3
+          sta devzei
+          lda DEVTAB+DVT_ADR+1,x
+          adc #0
+          and #$0f
+          ora #$20
+          sta devzei+1
+          ldy #0
+          rts
+#else
+          txa
+          asl
+          tax
+          lda DEVTAB+DVT_ADR,x
+          clc
+          adc #3
+          sta devzei
+          lda DEVTAB+DVT_ADR+1,x
+          adc #0
+          sta devzei+1
+          ldy #0
+          rts
+#endif
+          .)
+
+devgnam   .(
+#ifndef NOMMU
+          jsr cptasksys
+xSYSBUF   =BLKSIZ+PCBUF
+#else
+xSYSBUF   =PCBUF
+#endif
+          jsr setnam
+gn1       lda (devzei),y
+          sta xSYSBUF,y
+          iny
+          cmp #0
+          beq gn2
+          bne gn1
+gn2       tya
+          tax
+;#ifndef NOMMU
+;          jsr CPSYSTASK
+;#endif
+          jmp idcok
+          .)
+
+regdev    .(
+#ifndef NOMMU
+xSYSBUF   =BLKSIZ+PCBUF
+#else
+xSYSBUF   =PCBUF
+#endif
+
+#ifndef NOMMU
+          ldx #4
+          jsr cptasksys         ;CPTASKSYS
+          lda xSYSBUF+REGDEV_ADR
+          sta DZ
+          lda xSYSBUF+REGDEV_ADR+1
+          sta DZ+1
+          and #$f0
+          sta hidigit
+#ifndef ROM
+          lda xSYSBUF+REGDEV_MPOS
+          cmp #8
+          bcc loop
+          tay
+          lda MMU,y
+          sta xSYSBUF+REGDEV_MBLK
+#endif
+
+loop      lda xSYSBUF+REGDEV_MBLK
+          sta MMU+2
+          lda DZ+1
+          and #%00001111
+          ora #%00100000
+          sta DZ+1
+    
+          ldy #1
+          lda (DZ),y
+          dey
+          and (DZ),y
+          tay
+          iny
+          beq enddev
+
+          lda ANZDEV
+          cmp #MAXDEV
+          bcs enddev
+          asl
+          asl
+          tax
+
+          lda xSYSBUF+REGDEV_MPOS
+          sta DEVTAB+DVT_POS,x
+          lda xSYSBUF+REGDEV_MBLK
+          sta DEVTAB+DVT_BLK,x
+          lda DZ
+          clc
+          adc #2
+          sta DEVTAB+DVT_ADR,x          
+          lda DZ+1
+          adc #0
+          and #%00001111
+          ora hidigit
+          sta DEVTAB+DVT_ADR+1,x
+
+          ldx ANZDEV
+          inc ANZDEV
+          ldy freq
+          lda #DC_RES
+          jsr DEVCMD
+
+          jsr cptasksys
+          lda xSYSBUF+REGDEV_MBLK
+          sta MMU+2
+
+          ldy #0
+          lda (DZ),y
+          pha
+          iny
+          lda (DZ),y
+          sta DZ+1
+          pla
+          sta DZ
+          jmp loop
+
+enddev    lda #E_OK
+          jsr memtask
+          plp
+          clc
+          rts
+#else
+          ldx #4
+          lda xSYSBUF+REGDEV_ADR
+          sta DZ
+          lda xSYSBUF+REGDEV_ADR+1
+          sta DZ+1
+
+loop      ldy #1
+          lda (DZ),y
+          dey
+          and (DZ),y
+          tay
+          iny
+          beq enddev
+
+          lda ANZDEV
+          cmp #MAXDEV
+          bcs enddev
+          asl
+          tax
+
+          lda xSYSBUF+REGDEV_MPOS
+          cmp xSYSBUF+REGDEV_MBLK
+          bne sE_CONFIG
+          lda DZ
+          clc
+          adc #2
+          sta DEVTAB+DVT_ADR,x          
+          lda DZ+1
+          adc #0
+          sta DEVTAB+DVT_ADR+1,x
+
+          ldx ANZDEV
+          inc ANZDEV
+          ldy freq
+          lda #DC_RES
+          jsr DEVCMD
+
+          ldy #0
+          lda (DZ),y
+          pha
+          iny
+          lda (DZ),y
+          sta DZ+1
+          pla
+          sta DZ
+          jmp loop
+sE_CONFIG lda #E_CONFIG
+          .byt $2c
+enddev    lda #E_OK
+          jsr memtask
+          plp
+          cmp #1
+          rts
+#endif
+          .)
+          
+exejmp    .(
+#ifndef NOMMU
+cmd       =syszp
+par       =syszp+1
+-syszp    +=2
+#else
+cmd       =sysmem
+par       =sysmem+1
+-sysmem   +=2
+#endif
+
+          sta cmd
+          sty par
+          lda adev
+          pha
+          lda Syscnt
+          pha
+          lda #0
+          sta Syscnt     ; Aufrufe von Device wie von Task
+          stx adev       ; Dev-Nr fÅr memtask
+          txa
+          asl
+#ifndef NOMMU
+          asl
+          tax
+          lda DEVTAB+DVT_ADR,x
+          sta devzei
+          lda DEVTAB+DVT_ADR+1,x
+          sta devzei+1
+          lda DEVTAB+DVT_POS,x
+          and #$0f
+          cmp #$0e
+          bcs s1
+          tay
+          lda DEVTAB+DVT_BLK,x
+          sta MMU,y
+          tya
+          beq s0
+s1        lda cmd
+          ldy par
+          jsr jmpzei
+          sta cmd
+s2        pla
+          sta Syscnt
+          pla
+          sta adev
+          lda cmd
+          cmp #1
+          rts
+          
+jmpzei    jmp (devzei)
+
+sx        jmp (BLKSIZ+devzei)
+
+s0        lda #SYSPAGE
+          sta MMU+1
+          tsx
+          stx BLKSIZ+$1ff
+          lda BLKSIZ+cmd
+          ldy BLKSIZ+par
+          ldx $1ff
+          txs
+          jsr sx
+          tsx
+          stx $1ff
+          ldx #SYSPAGE
+          stx MMU
+          sta cmd
+          ldx $1ff
+          txs
+          jmp s2
+#else
+          tax
+          lda DEVTAB+DVT_ADR,x
+          sta devzei
+          lda DEVTAB+DVT_ADR+1,x
+          sta devzei+1
+          lda cmd
+          ldy par
+          jsr jmpzei
+          sta cmd
+          pla
+          sta Syscnt
+          pla
+          sta adev
+          lda cmd
+          cmp #1
+          rts
+          
+jmpzei    jmp (devzei)
+#endif
+          .)
+
+          .)
+

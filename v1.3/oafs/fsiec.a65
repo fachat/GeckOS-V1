@@ -1,0 +1,3212 @@
+
+#ifndef ROM
+/*#define   INVERT*/
+#define   PARALLEL    
+/*#define   NOCMD*/
+/*#define   NOFS*/
+/*#define   SHOW*/           /* test-define */
+/*#define   NOLOOP*/
+/*#define   NOPRG*/
+#define   STDTST
+#endif
+
+          .(
+#ifdef ROM
+          .word ende
+          .byt PK_FS+$80
+          .byt 2
+          .word 0
+          .word PRG
+#ifndef ROMTEST
+          .byt 8,8,9,9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt 8,$18,9,$19,$a,$1a,$b,$1b,$c,$1c,$d,$1d,$e,$1e,<-1
+#endif
+          .asc "fsiec",0
+#else
+
+;#include  "stdio.a65"
+#include  "oadef\oa1str.def"
+#include  "oa1\oa1sj.a65"
+#include  "oadef\oa1fs.def"
+
+#ifdef NOPRG
+
+          .word $800
+          *=$800
+          jmp PRG
+
+#else
+;          .word $800
+          *=$800
+          .word 0
+          .byt PK_PRG    ;PK_FS+$80
+          .byt 8
+          .word 0
+          .word PRG
+          .byt <-1
+
+#endif
+#endif          
+          
+#define   IECBUF    $100
+#define   MAXLEN    64
+
+#define   MAXFILE   6
+#define   BUFSIZE   128
+#define   ANZDRV    2
+
+#define   F_FL      0         ; fnr+secadr =pos in tab
+#define   F_DEV     1
+#define   F_DRV     2
+#define   F_STR     3
+#define   F_LEN     4         ; anzahl Byte in Puffer
+#define   F_BYT     5         ; aktuelles Byte
+#define   F_MODE    6         ; 0=read,1=write
+#define   F_SLEN    8
+
+#define   F_FL_OK   0
+#define   F_FL_DIR  1
+#define   F_FL_EOF  2
+#define   F_FL_DO   3
+#define   F_FL_DOX  4
+#define   F_FL_FRE  255
+#define   F_MODE_RD 0
+#define   F_MODE_WR 1
+
+#define   FT_MOD         0
+#define   FT_STR         1
+#define   FT_BYT         2
+#define   FT_BYT2        3
+#define   FT_ST          4
+#define   FT_BYT3        5
+#define   FT_DRV         6
+#define   FT_BUF         7
+#define   FT_SLEN        8
+#define   FT_MOD_FRE     0
+#define   FT_MOD_IN      1
+#define   FT_MOD_OUT     2
+#define   FT_MOD_EOF     3
+#define   FT_MOD_DIR     4
+#define   ANZ_FT         16
+
+#ifndef NOMMU
+-syszp    =$40
+-sysmem   =$300
+-sysblk   =$800
+#endif
+
+#echo fsiec:
+#print syszp
+#print sysmem
+#print sysblk
+
+-sysblk   -=MAXFILE*BUFSIZE
+
+fzei      =syszp
+bzei      =syszp+2
+
+owntask   =sysmem
+cnt       =sysmem+1
+cmd       =sysmem+2
+anz       =sysmem+3
+client    =sysmem+4
+actfil    =sysmem+5
+ftab      =sysmem+6
+
+buf       =sysblk
+
+-syszp    +=4
+-sysmem   +=F_SLEN*MAXFILE+6
+
+#ifdef SHOW
+showcnt   =sysmem
+-sysmem   +=1
+#endif
+
+PRG       .(
+          stx owntask
+
+#ifdef SHOW
+          lda #0
+          sta showcnt
+#endif
+
+          jsr IECINIT
+          bcs term
+
+#ifndef NOLOOP
+          jsr iniftab
+          jsr iniass
+          jsr inipfad
+          jsr iniunit
+#endif
+          ldx #<-1
+          jsr setzei     ; init setzei (actfil)
+          ldx #0
+          stx anz
+p1        jsr setzei
+          lda #F_FL_FRE
+          ldy #F_FL
+          sta (fzei),y
+          inx
+          cpx #MAXFILE
+          bcc p1
+
+#ifndef NOFS
+          lda #ANZDRV         ; 2 Drives
+          sta PCBUF+FM_REG_DRVS
+          lda owntask
+          sta PCBUF+FM_REG_ENV
+          lda #FM_REG
+          ldx #SEND_FM   
+          ldy #2
+          jsr SEND
+          bcs term
+#endif
+
+          .(
+          ldx #20        ; nach dem Einschalten Autostart VC1541 
+x0        jsr setti      ; berspringen
+x1        jsr fragti
+          beq x1
+          dex
+          bne x0
+          .)
+          
+          jmp loop
+term      jmp TERM
+
+
+          .(
+#ifdef SHOW
+
+dx        =sysmem
+-sysmem   +=1
+
+&&CRLFOUT
+          lda #13
+          jsr OUT
+          lda #10
+&&OUT
+          stx dx
+/*          ldx #$3c
+          stx $e888
+          sei
+          ldx #$10
+          stx $eff8
+          ldx showcnt
+          sta $8000,x
+          inc showcnt*/
+          ldx #STDOUT
+          jsr SOUT
+          ldx dx
+          rts
+#endif
+
+&&SOUT    pha
+          jsr PUTC
+          pla            
+          bcc ok         
+          jsr SUSPEND
+          jmp SOUT
+ok        clc
+          rts
+          .)
+
+#ifdef SHOW
+
+&HEXOUT   .(
+          pha
+          lsr
+          lsr
+          lsr
+          lsr
+          jsr nib
+          pla
+          and #$0f
+          jsr nib
+          lda #0
+h1        clc
+          adc #251            ; prim
+          bne h1
+          jmp SUSPEND   
+nib       clc
+          adc #"0"
+          cmp #"9"+1
+          bcc out
+          adc #"A"-("9"+1)-1
+out       jmp OUT
+          .)
+          
+&savdata  .(
+          pha
+          tya
+          pha
+          sei
+          lda #$18
+          sta $eff8
+          ldy #0
+sd1       lda $300,y
+          sta $8000,y
+          lda $400,y
+          sta $8100,y
+          lda $500,y
+          sta $8200,y
+          lda $600,y
+          sta $8300,y
+          iny
+          bne sd1
+          pla
+          tay
+          pla
+          cli
+          rts
+          .)
+#endif
+
+/**************************************************************************/
+
+loop      
+#ifndef NOLOOP
+          jsr INLOOP
+#endif
+          jsr SUSPEND
+#ifdef NOFS
+          jmp loop
+#else
+          clc
+          jsr RECEIVE
+          bcs l1
+          jsr rxmess
+l1        ldx #0
+          stx anz
+          stx cnt
+l2        jsr setzei
+          ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_EOF+1
+          bcc l2a
+          jmp nextl
+
+l2a       inc anz
+          ldy #F_MODE
+          lda (fzei),y
+          cmp #F_MODE_RD
+          bne l3
+
+ol        ldy #F_BYT
+          lda (fzei),y
+          ldy #F_LEN
+          cmp (fzei),y
+          beq l4
+          pha
+          ldy #F_STR
+          lda (fzei),y
+          tax
+          pla
+          tay
+          lda (bzei),y
+          jsr PUTC
+          bcs l5n
+          ldy #F_BYT
+          lda (fzei),y
+          clc
+          adc #1
+          sta (fzei),y
+          jmp ol
+
+l4        ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_EOF
+          bne l4a
+          ldy #F_STR
+          lda (fzei),y
+          tax
+          lda #SC_EOF
+          jsr STRCMD
+          jsr close
+          jmp nextl
+l4a       jsr clrbuf
+          jsr loadbuf
+          bcc l5
+          ldy #F_FL
+          lda #F_FL_EOF
+          sta (fzei),y
+l5        jmp nextl
+
+l5n       cmp #E_NUL
+          bne l5
+          ldy #F_STR
+          lda (fzei),y
+          tax
+          lda #SC_EOF
+          jsr STRCMD
+          jsr close
+          jmp nextl
+
+l3        cmp #F_MODE_WR
+          bne l8
+          
+il        ldy #F_BYT
+          lda (fzei),y
+          cmp #BUFSIZE
+          beq l6
+          pha
+          ldy #F_STR
+          lda (fzei),y
+          tax
+          pla
+          tay
+          jsr GETC
+          bcs l7
+          sta (bzei),y
+          ldy #F_BYT
+          lda (fzei),y   
+          clc
+          adc #1
+          sta (fzei),y
+          jmp il
+
+l7        cmp #E_EOF
+          bne l8
+          ldy #F_STR
+          lda (fzei),y
+          tax
+          lda #SC_NUL
+          jsr STRCMD
+          jsr savebuf
+          jsr close
+          jmp nextl
+
+l6        jsr savebuf
+          jsr clrbuf
+          jmp nextl
+
+l8 nextl  inc cnt
+          ldx cnt
+          cpx #MAXFILE
+          bcs endloop
+          jmp l2
+endloop   jmp loop
+          .)
+
+/**************************************************************************/
+
+savebuf   .(
+          jsr setfpar
+          clc
+          ldy #F_BYT
+          lda (fzei),y
+          beq lbe 
+          jsr LISTEN
+          jsr SECLISTEN
+          lda #0
+lb1       tay
+          lda (bzei),y
+          jsr IECOUT
+          iny
+          bcs lbe
+          tya
+          ldy #F_BYT
+          cmp (fzei),y
+          bcc lb1
+lbe       php
+          jsr UNLISTEN
+          plp
+          rts
+          .)
+ 
+loadbuf   .(
+dirtst    =sysmem
+-sysmem   +=1
+          ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_DIR
+          beq loadirbuf
+          jsr setfpar
+          jsr TALK
+          jsr SECTALK
+          ldy #0
+lb1       jsr IECIN
+          sta (bzei),y
+          iny
+          bcs lbe
+          cpy #BUFSIZE
+          bcc lb1
+          clc
+lbe       php
+          tya
+          ldy #F_LEN
+          sta (fzei),y
+          jsr UNTALK
+          plp
+          rts
+loadirbuf jsr setfpar
+          jsr TALK
+          jsr SECTALK
+          jsr IECIN
+          jsr IECIN
+          lda #FS_DIR_MOD_FRE
+          ldy #FS_DIR_MODE
+          sta (bzei),y
+          ldy #FS_DIR_LEN
+          lda #0
+          sta (bzei),y
+          iny
+          jsr IECIN
+          bcs gdxx
+          sta (bzei),y
+          iny
+          jsr IECIN
+          bcs gdxx
+          sta (bzei),y
+          iny
+          lda #0
+          sta (bzei),y
+          ldx #6
+          ldy #FS_DIR_YEAR
+gd1       lda data-FS_DIR_YEAR,y
+          sta (bzei),y
+          iny
+          dex
+          bne gd1
+gd2       jsr IECIN
+gdxx      bcs gdxx2
+          cmp #34
+          beq gd2x
+          cmp #18        ; revers
+          bne gd2
+          lda #FS_DIR_MOD_NAM
+          ldy #FS_DIR_MODE
+          sta (bzei),y
+gd2y      jsr IECIN
+          bcs gdxx2
+          cmp #34
+          bne gd2y
+          beq gd3a
+gd2x      ldy #FS_DIR_MODE
+          lda #FS_DIR_MOD_FIL
+          sta (bzei),y
+gd3a      ldy #FS_DIR_NAME
+gd3       jsr IECIN
+          bcs gdxx2
+          cmp #34
+          beq gd4
+          jsr CBM2ASC
+          sta (bzei),y
+          iny
+          cpy #BUFSIZE-7
+          bcc gd3
+          jmp gde
+gd4       
+          lda #","
+          sta (bzei),y
+          iny
+          sty dirtst
+gd5       jsr IECIN
+gdxx2     bcs gdx
+          cmp #" "
+          beq gd5
+          cmp #0
+          beq gdy2
+          bne gd6
+gd6a      jsr IECIN
+          bcs gdx
+gd6       jsr CBM2ASC
+          sta (bzei),y
+          cmp #0
+          beq gd6b2
+          cmp #" "
+          beq gd6b
+          iny
+          cpy #BUFSIZE-1
+          bcc gd6a
+          
+gd6b      jsr IECIN
+          bcs gdx 
+          cmp #0
+          bne gd6b
+          
+gd6b2     lda #0
+          sta (bzei),y
+          iny
+          tya
+          ldy #F_LEN
+          sta (fzei),y
+          
+          ldy dirtst
+          lda (bzei),y
+          cmp #"d"
+          bne gde
+          iny
+          lda (bzei),y
+          cmp #"i"
+          bne gde
+          iny
+          lda (bzei),y
+          cmp #"r"
+          bne gde
+          ldy #FS_DIR_MODE
+          lda (bzei),y
+          cmp #FS_DIR_MOD_FIL
+          bne gde
+          lda #FS_DIR_MOD_DIR
+          sta (bzei),y
+          lda dirtst
+          ldy #F_LEN
+          sta (fzei),y
+          tay
+          dey
+          lda #0
+          sta (bzei),y 
+          
+gde       ;jsr IECIN
+          ;bcs gdx
+          ;cmp #0
+          ;bne gde
+gdy2      clc
+          bcc gdy
+gdx       ldy #FS_DIR_NAME
+          lda #0
+          sta (bzei),y
+          iny
+          tya
+          ldy #F_LEN
+          sta (fzei),y
+gdy       php
+          jsr UNTALK
+          plp
+          rts
+
+data      .byt 91,4,7,13,6,0
+          .)
+  
+close     jsr setfpar
+          jsr IECLOSE
+          lda #F_FL_FRE
+          ldy #F_FL
+          sta (fzei),y
+          rts
+
+/**************************************************************************/
+
+rxmess    .(
+          stx client
+          cmp #FS_OPEN_RD
+          bne rx1a
+          lda #"r"
+          bne rxop
+rx1a      cmp #FS_OPEN_WR
+          bne rx1b
+rx1ab     lda #"w"
+          bne rxop
+rx1b      cmp #FS_OPEN_AP
+          beq rx1x
+          cmp #FS_OPEN_OW
+          beq rx1ab
+          jmp rx1
+rx1x      lda #"a"
+rxop      sta cmd
+          lda PCBUF+FS_OPEN_PFAD
+          bne rxepfad
+          jsr getfre
+          bcs rxe1
+          lda PCBUF+FS_OPEN_DRV
+          ldy #F_DEV
+          sta (fzei),y
+          jsr setfpar
+          lda cmd
+          jsr setfnpar
+          jsr IECOPEN
+          bcs rxe2
+          jsr DISKST
+          bcs rxe2
+          lda PCBUF+FS_OPEN_STR
+          ldy #F_STR
+          sta (fzei),y
+          lda #0
+          ldy #F_DRV     
+          sta (fzei),y
+          lda #F_FL_OK
+          ldy #F_FL
+          sta (fzei),y
+          jsr clrbuf
+          lda cmd
+          cmp #"r"
+          bne rxr1
+          lda #F_MODE_RD
+          .byt $2c
+rxr1      lda #F_MODE_WR
+          ldy #F_MODE
+          sta (fzei),y
+
+          lda #E_OK
+          ldx owntask
+          ldy actfil
+          jmp endrx
+
+rxe2      jsr IECLOSE
+          lda #E_FNODRV
+          .byt $2c
+rxepfad   lda #E_FNOPATH
+          .byt $2c
+namlenerr lda #E_FNONAM
+          .byt $2c
+rxe1      lda #E_FNOFIL
+          .byt $2c
+rxe0      lda #E_NOTIMP
+endrx     sta PCBUF+FS_X_ERR
+          ldx owntask
+          stx PCBUF+FS_X_ENV
+          sty PCBUF+FS_X_FIL
+          ldy #FS_X_SLEN
+          ldx client
+          jmp SEND
+
+rx1       cmp #FS_OPEN_DR
+          beq rx1aa
+          jmp rxcmds
+rx1aa     lda PCBUF+FS_OPEN_PFAD
+          bne rxepfad
+          ldx PCBUF+FS_OPEN_DRV
+          jsr setzei
+          ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_FRE
+          bne rxe1          
+          lda PCBUF+FS_OPEN_DRV
+          ldy #F_DEV
+          sta (fzei),y
+          jsr setfpar
+          lda PCBUF+FS_OPEN_STR
+          ldy #F_STR
+          sta (fzei),y
+
+          lda PCBUF+FS_OPEN_NAME
+          bne xx1a
+          sta PCBUF+FS_OPEN_NAME+1
+          lda #"*"
+          sta PCBUF+FS_OPEN_NAME
+
+xx1a      lda #"$"
+          sta PCBUF+FS_OPEN_NAME-2
+          lda #":"
+          cmp PCBUF+FS_OPEN_NAME+1
+          bne xx1a2
+          lda #" "
+xx1a2     sta PCBUF+FS_OPEN_NAME-1
+
+          ldy #0
+xx1       lda PCBUF+FS_OPEN_NAME-2,y
+          beq xx2
+          iny 
+          bne xx1
+xx2       tya
+          ldy #>(PCBUF+FS_OPEN_NAME-2)
+          ldx #<(PCBUF+FS_OPEN_NAME-2)
+          jsr SETFNPAR
+          jsr IECOPEN
+rxe2a     bcs rxe2b
+          jsr DISKST
+          bcs rxe2a
+          jsr TALK
+          jsr SECTALK
+          jsr IECIN
+          jsr IECIN
+          jsr UNTALK
+          lda #0
+          ldy #F_DRV     
+          sta (fzei),y
+          lda #F_FL_DIR
+          ldy #F_FL
+          sta (fzei),y
+          jsr clrbuf
+          lda #F_MODE_RD
+          ldy #F_MODE
+          sta (fzei),y
+
+          lda #E_OK
+          ldx owntask
+          ldy actfil
+          jmp endrx
+          
+rxe2b     jmp rxe2
+
+rxcmds    
+#ifdef    NOCMD
+          jmp rxe0
+#else
+          pha
+          lda PCBUF+FS_CMD_DRV
+          clc
+          adc #8
+          tax
+          ldy #15
+          jsr SETFPAR
+          pla
+          ldx PCBUF+FS_CMD_PFAD
+          beq rcr0
+          jmp rxepfad
+rcr0      cmp #FS_RENAME
+          bne rxc2
+          lda #"r"
+          sta IECBUF
+          
+          lda #":"
+          cmp PCBUF+FS_CMD_NAME+1
+          bne rcr0a
+          lda #" "
+rcr0a     sta IECBUF+1
+
+          ldy #FS_CMD_NAME
+rcr1      lda PCBUF,y 
+          beq rcr2
+          iny
+          bne rcr1
+rcr2      ldx #2
+          iny
+rcr3      lda PCBUF,y
+          beq rcr4
+          sta IECBUF,x
+          iny
+          inx
+          cpx #MAXLEN
+          bcc rcr3
+          jmp namlenerr
+rcr4      lda #"="
+          sta IECBUF,x
+          inx
+          ldy #FS_CMD_NAME
+rcr5      lda PCBUF,y
+          sta IECBUF,x
+          beq rcr6
+          iny
+          inx
+          cpx #MAXLEN
+          bcc rcr5
+          jmp namlenerr
+rcr6      txa
+          ldx #<IECBUF
+          ldy #>IECBUF
+cmds      jsr SETFNPAR
+          jsr IECOPEN    
+          jsr DISKST
+          php
+          jsr IECLOSE
+          plp
+          lda #E_OK
+          bcc rcr7
+          lda #E_NODEV
+rcr7      jmp endrx
+
+rxc2      cmp #FS_DELETE
+          bne rxc3
+          lda #"s"
+scmds     sta PCBUF+FS_CMD_NAME-2
+          lda #":"
+          cmp PCBUF+FS_CMD_NAME+1
+          bne sc1
+          lda #" "
+sc1       sta PCBUF+FS_CMD_NAME-1
+          ldy #0
+rcd1      lda PCBUF+FS_CMD_NAME-2,y
+          beq rcd2
+          iny
+          bne rcd1
+rcd2      tya
+          ldx #<(PCBUF+FS_CMD_NAME-2)
+          ldy #>(PCBUF+FS_CMD_NAME-1)
+          jmp cmds
+    
+rxc3      cmp #FS_FORMAT 
+          bne rxc4
+          lda #"n"
+          bne scmds      
+
+rxc4      cmp #FS_CHKDSK
+          bne rxc5
+          lda #"v"
+          bne scmds
+          
+rxc5      cmp #FS_CLOSE
+          bne rxc6
+          ldx PCBUF+FS_CMD_FIL
+          cpx #MAXFILE
+          bcs rxc5e
+          jsr setzei
+          ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_FRE
+          beq rxc5e
+          ldy #F_MODE
+          lda (fzei),y
+          cmp #F_MODE_WR
+          bne rxc5a
+          jsr savebuf
+rxc5a     jsr close
+          lda #E_OK
+          .byt $2c
+rxc5e     lda #E_ILLPAR
+          jmp endrx
+
+rxc6      jmp rxe0 
+
+#endif
+#endif
+          .)
+
+/**************************************************************************/
+
+getbuf    .(
+          ;ldx #0
+          ;.byt $2c
+&getfre  
+          ldx #ANZDRV
+          stx cnt
+gf1       jsr setzei
+          ldx cnt
+          ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_FRE  
+          clc
+          beq gf2
+          inc cnt
+          ldx cnt
+          cpx #MAXFILE
+          bcc gf1
+gf2       rts
+          .)
+          
+#ifndef NOFS
+setfnpar  .(
+
+div       =sysmem
+-sysmem   +=1
+
+          pha
+          ldy #0
+          sty div
+sfn0      lda PCBUF+FS_OPEN_NAME,y
+          beq sfn1
+          cmp #","
+          bne sfn2
+          sta div
+sfn2      iny
+          bne sfn0
+sfn1      lda div
+          bne sfn3
+          lda #","
+          sta PCBUF+FS_OPEN_NAME,y
+          iny
+          lda #"p"
+          sta PCBUF+FS_OPEN_NAME,y
+          iny
+sfn3      lda #","
+          sta PCBUF+FS_OPEN_NAME,y
+          iny
+          pla
+          sta PCBUF+FS_OPEN_NAME,y
+          iny
+          tya
+          ldx #<PCBUF+FS_OPEN_NAME
+          ldy #>PCBUF+FS_OPEN_NAME
+          jmp SETFNPAR
+          .)
+          
+setfpar   ldy #F_DEV
+          lda (fzei),y
+          clc
+          adc #8
+          tax
+          ldy #0
+          lda actfil
+          cmp #ANZDRV
+          bcc sfp1
+          clc
+          adc #2
+          tay
+sfp1      jmp SETFPAR
+          
+clrbuf    lda #0
+          ldy #F_LEN
+          sta (fzei),y
+          ldy #F_BYT
+          sta (fzei),y
+          rts
+#endif
+
+setzei    .(             ; setzt zeiger, x=filenr
+          cpx actfil
+          beq sz1
+          stx actfil
+          txa
+          asl
+          asl
+          asl
+          clc
+          adc #<ftab
+          sta fzei
+          lda #>ftab
+          adc #0
+          sta fzei+1
+          txa
+          clc
+          adc #>buf*2
+          lsr
+          sta bzei+1
+          lda #<buf*2
+          ror
+          sta bzei
+sz1       rts
+          .)
+
+ASC2CBM   .(             ; ringtausch $20->$a0->$40->$20
+          cmp #"A"
+          bcc tuok
+          cmp #"Z"+1
+          bcs tu2
+          ora #$80
+          bne tuok
+tu2       cmp #"a"
+          bcc tuok
+          cmp #"z"+1
+          bcs tu3
+          sbc #$1f
+          bne tuok
+tu3       cmp #"A"+$80
+          bcc tuok
+          cmp #"Z"+$81
+          bcs tuok
+          adc #$a0
+tuok      rts
+          .)
+
+CBM2ASC   .(             ; ringtausch $a0->$20->$40->$a0
+          cmp #"A"
+          bcc tlok
+          cmp #"Z"+1
+          bcs tl2
+          adc #$20
+          bne tlok
+tl2       cmp #"a"
+          bcc tlok
+          cmp #"z"+1
+          bcs tl3
+          adc #$60
+          bne tlok
+tl3       cmp #"A"+$80
+          bcc tlok
+          cmp #"Z"+$81
+          bcs tlok
+          and #$7f
+tlok      rts
+          .)
+          
+/************************** IEC-Routinen **********************************/
+/* hier Blocktiefe 1 */
+
+          .(
+namzei    =syszp
+
+secadr    =sysmem
+devadr    =sysmem+1
+namlen    =sysmem+2
+status    =sysmem+3
+
+-syszp    +=2
+-sysmem   +=4
+
+#ifndef NOFS
+
+          .(
+&&SETFNPAR sta namlen
+          stx namzei
+          sty namzei+1
+          rts
+&&SETFPAR  stx devadr
+          sty secadr
+          rts
+&&IECLOSE  jsr LISTEN
+          lda secadr
+          and #$ef
+          ora #$e0
+          jsr seclisten
+          jsr UNLISTEN
+          clc
+          rts
+&&IECOPEN  lda #0
+          sta status
+          jsr LISTEN
+          lda secadr
+          ora #$f0
+          jsr seclisten
+          lda status
+          bmi opend
+          lda namlen
+          beq nonam
+          ldy #0
+op1       lda (namzei),y
+          jsr ASC2CBM         ;jsr TOUPPER
+#ifdef SHOW
+          pha
+          JSR OUT
+          pla
+#endif
+          jsr IECOUT
+          iny
+          cpy namlen
+          bne op1
+#ifdef SHOW
+          jsr CRLFOUT
+#endif
+nonam     jsr UNLISTEN
+          clc
+          rts
+opend     lda #E_NODEV
+          sec
+          rts
+          
+&&DISKST   lda #0
+          sta status
+          jsr TALK
+          lda #$6f
+          jsr sectalk
+          jsr IECIN
+          cmp #"1"
+          beq lx1
+          cmp #"0"
+          bne lx
+lx1       lda status
+          bne lx
+          clc
+          .byt $24
+lx        sec
+          php
+          jsr UNTALK
+          plp
+          rts
+          .)
+#endif
+
+/* Blocktiefe 2 */
+
+#define   VIA1      $e840
+#define   PIA1      $e820
+
+byte      =sysmem
+errfl     =sysmem+1
+eoifl     =sysmem+2
+-sysmem   +=3
+
+#ifndef NOLOOP
+filetab   =sysmem
+-sysmem   +=FT_SLEN*ANZ_FT
+#endif
+
+&IECINIT  .(
+#ifdef INVERT
+          lda #%00110000
+          sta PIA1+PIA_CRA
+          lda #0
+          sta PIA1+PIA_PA
+          cmp PIA1+PIA_PA
+          bne inix
+          lda #%00110100
+          sta PIA1+PIA_CRA
+          
+          lda #%00110000
+          sta PIA1+PIA_CRB
+          lda #$ff
+          sta PIA1+PIA_PB
+          cmp PIA1+PIA_PB
+          bne inix
+          lda #%00110100
+          sta PIA1+PIA_CRB
+          lda #0
+          sta PIA1+PIA_PB
+
+          lda #%00111100
+          sta VIA1+VIA_DDRB
+          cmp VIA1+VIA_DDRB
+          bne inix
+
+          lda #0
+          sta VIA1+VIA_DRB
+
+          lda VIA1+VIA_ACR
+          and #%00111101
+          sta VIA1+VIA_ACR
+          lda VIA1+VIA_PCR
+          ora #%11100000      ; cb2 hi out
+          sta VIA1+VIA_PCR
+          lda #%01011000
+          sta VIA1+VIA_IER
+          lda #0
+          sta byte
+          sta errfl
+          sta eoifl
+          clc
+          rts
+inix      sec
+          rts
+#else
+          lda #%00111000
+          sta PIA1+PIA_CRA
+          lda #0
+          sta PIA1+PIA_PA          ; DDRA
+          cmp PIA1+PIA_PA
+          bne inix
+          lda #%00111100           ; DAV hi
+          sta PIA1+PIA_CRA
+          
+          lda #%00111000
+          sta PIA1+PIA_CRB
+          lda #$ff
+          sta PIA1+PIA_PB          ; DDRB
+          cmp PIA1+PIA_PB
+          bne inix
+          lda #%00111100           ; NRFD hi
+          sta PIA1+PIA_CRB
+          lda #<-1                 ; DRB
+          sta PIA1+PIA_PB
+
+          lda #%00111100
+          sta VIA1+VIA_DDRB
+          cmp VIA1+VIA_DDRB
+          bne inix
+          sta VIA1+VIA_DRB         ; alle ausg„nge hi
+
+          lda VIA1+VIA_ACR
+          and #%00111101           ; PB2 Latch off, T1 timed IRQ
+          sta VIA1+VIA_ACR
+          lda VIA1+VIA_PCR
+          ora #%11100000           ; cb2 hi out (Piezo)
+          sta VIA1+VIA_PCR
+          lda #%01011000           ; T1, CB1, CB2 -IRQ off 
+          sta VIA1+VIA_IER
+          lda #0
+          sta byte
+          sta errfl
+          sta eoifl
+          clc
+          rts
+inix      sec
+          rts
+#endif
+          .)
+
+#ifndef NOLOOP          
+          .(
+          
+&&&iniftab .(
+          ldx #0
+          lda #FT_MOD_FRE
+i1        sta filetab+ANZ_FT*FT_MOD,x
+          ;lda #0
+          sta filetab+ANZ_FT*FT_ST,x
+          inx
+          cpx #15
+          bcc i1
+          ldx #0
+          stx reterr
+          stx outpos 
+          stx outlen
+          clc
+          rts
+          .)
+           
+cmdfl     =sysmem
+listenfl  =sysmem+1
+talkfl    =sysmem+2
+reterr    =sysmem+3
+bufpos    =sysmem+4
+outpos    =sysmem+5
+outlen    =sysmem+6
+lstnadr   =sysmem+7
+talkadr   =sysmem+8
+&filenr   =sysmem+9
+-sysmem   +=10
+INBUF     =sysmem
+-sysmem   +=MAXLEN
+OUTBUF    =sysmem
+-sysmem   +=MAXLEN
+
+RETLOOP   cli
+          lda #0
+          sta cmdfl
+          jsr clrdata
+          jsr davhi
+          jsr eoihi
+          jsr ndachi
+          jmp nrfdhi
+          
+&&INLOOP  cli
+lx        lda VIA1+VIA_DRA
+          cmp VIA1+VIA_DRA
+          bne lx
+          and #%00010000 
+          bne RETLOOP          ; wait atnlo
+atndet    sei
+          lda #0
+          sta cmdfl
+          jsr clrdata
+          jsr davhi
+          jsr eoihi
+     jsr ndaclo
+          jsr nrfdlo
+          jsr atnalo
+inext     jsr ndaclo
+          jsr nrfdhi
+          lda #$10
+ix1       bit VIA1+VIA_DRA
+          bne iende      ; atn hi
+          bit VIA1+VIA_DRB
+          bvs ix1        ; dav hi 
+          jsr nrfdlo
+          jsr bytin
+          pha
+          jsr ndachi
+          pla
+          cmp #$3f       ; unlisten
+          bne il2
+          lda #0
+          sta listenfl
+          sta cmdfl
+          beq weiter
+il2       cmp #$5f       ; untalk
+          bne il3
+          lda #0
+          sta talkfl
+          sta cmdfl
+          beq weiter
+il3       cmp lstnadr    ; listen
+          bne il4
+          sta cmdfl
+          lda #1
+          sta listenfl
+          lda #0
+          sta talkfl
+          beq weiter
+il4       cmp talkadr    ; talk
+          bne il5
+          sta cmdfl
+          lda #1
+          sta talkfl
+          lda #0
+          sta listenfl
+          beq weiter
+il5       ldx cmdfl
+          beq weiter          
+          tax
+          and #$60
+          cmp #$60
+          bne weiter
+          txa
+          sta secadr
+          and #$f0
+          cmp #$e0
+          bne weiter
+          jsr iclose
+          lda #0
+          sta listenfl
+          
+weiter    bit VIA1+VIA_DRB
+          bvc weiter          ; wait davhi
+          jmp inext
+
+iende     lda listenfl
+          bne listenloop
+          jsr ndachi
+          jsr atnahi
+          lda talkfl
+          bne talkloopx
+          jmp RETLOOP
+
+talkloopx jmp talkloop
+atndet1   jmp atndet
+
+listenloop
+          jsr nrfdlo
+          jsr atnahi
+          lda #0
+          sta status
+          
+          lda secadr
+          and #15
+          sta filenr
+          tax
+          cmp #15
+          beq incbuf     ; secadr 15
+          lda secadr
+          and #$f0
+          cmp #$f0
+          beq inbuf      ; open
+          cmp #$e0
+          beq inul
+          lda filetab+ANZ_FT*FT_MOD,x
+          and #127
+          cmp #FT_MOD_IN
+          bne inerr
+
+lstnlp    jsr liecin
+          bit status
+          bvs ll
+          bcs atndet1
+ll        
+#ifdef SHOW
+          jsr OUT
+#endif
+          ldy filenr
+          ldx filetab+ANZ_FT*FT_STR,y
+          jsr SOUT
+          bcs clnul
+          bit status
+          bvc lstnlp     ; kein eoi
+retloop   jmp RETLOOP     ; gibt beim n„chsten Schreibversuch time-out
+
+clnul     jsr iclose
+          ldx #8
+          stx reterr
+          jmp inulx
+          
+inerr     ldx #2
+          cmp #FT_MOD_OUT
+          bne inerr1
+          .byt $2c
+inerr4    ldx #4
+          .byt $2c
+inerr5    ldx #5
+          .byt $2c
+inerr1    ldx #1
+          stx reterr
+inul      jsr liecin
+atndet3   bcs atndet1
+inulx     bit status
+          bvc inul
+          bvs retloop
+          
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_FRE
+          beq inerr1
+inbuf     ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_FRE
+          bne inerr4
+incbuf    ldy #0
+          sty bufpos
+inbufl    jsr liecin
+          bit status
+          bvs il
+          bcs atndet3
+il        ldy bufpos
+          jsr CBM2ASC
+          sta INBUF,y
+          inc bufpos
+          lda bufpos
+          cmp #MAXLEN-1
+          bcs inerr5
+          bit status
+          bvc inbufl
+          lda #0
+          ldy bufpos
+          sta INBUF,y
+          lda secadr
+          and #15
+          cmp #15
+          beq cmd2
+          lda secadr
+          and #$f0
+          cmp #$f0
+          bne cmd2
+          jsr open
+          jmp RETLOOP
+cmd2      jsr sendcmd    ; cmd ausfhren
+          jmp RETLOOP
+          
+iclose    lda secadr
+          and #15
+          sta filenr
+          cmp #15
+          beq clerr0
+          tay
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_FRE
+          beq clerr1
+
+          ldx filetab+ANZ_FT*FT_BUF,y
+          bmi clx
+          jsr setzei
+          ldy #F_FL
+          lda #F_FL_FRE
+          sta (fzei),y
+
+clx       ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          ldx filetab+ANZ_FT*FT_STR,y
+          cmp #FT_MOD_DIR
+          beq clout
+          cmp #FT_MOD_OUT
+          beq clout
+          cmp #FT_MOD_EOF
+          beq clout
+          lda #SC_EOF
+          .byt $2c
+clout     lda #SC_NUL
+          jsr STRCMD
+          lda #FT_MOD_FRE
+          sta filetab+ANZ_FT*FT_MOD,y
+clerr0    ldx #0
+          .byt $2c
+clerr1    ldx #1
+          .byt $2c
+operr4    ldx #4
+          stx reterr
+          rts
+
+open      .(
+owfl      =sysmem
+-sysmem   +=1
+
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_FRE
+          bne operr4
+          lda #<-1
+          sta filetab+ANZ_FT*FT_BUF,y
+          lda #0
+          sta filetab+ANZ_FT*FT_ST,y
+          cpy #1
+          beq os2
+          cpy #0
+          bne os1
+          lda #FT_MOD_OUT
+          .byt $2c
+os2       lda #FT_MOD_IN
+          sta filetab+ANZ_FT*FT_MOD,y
+os1       ldy #0
+          jsr fgetdrv              ; a=drv, x=cmd
+          bcs operr3x
+          sta PCBUF+FS_OPEN_DRV
+          stx owfl
+          cpx #1
+          bne nodir
+          sty bufpos
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_IN
+          beq operr9
+          jsr getbuf
+          bcs operr6
+operr3x   bcs operr3
+          ldy filenr
+          txa
+          sta filetab+ANZ_FT*FT_BUF,y
+          lda #FT_MOD_DIR
+          sta filetab+ANZ_FT*FT_MOD,y
+          ldy #F_FL
+          lda #F_FL_DO
+          sta (fzei),y
+          ldy #F_LEN
+          lda #0
+          sta (fzei),y
+          ldy bufpos
+nodir     ldx #FS_OPEN_NAME
+          jsr inspfad    ; nach PCBUF,x
+o1        lda INBUF,y
+          sta PCBUF,x
+          beq onex
+          inx
+          iny
+          cmp #","
+          bne o1
+          lda #0
+          stx bufpos
+          dex
+          sta PCBUF,x
+o2        lda INBUF,y
+          beq one
+          iny
+          cmp #" "
+          beq o2  
+          cmp #","
+          beq operr3
+          cmp #"R"
+          beq opout
+          cmp #"W"
+          beq opin
+o3        lda INBUF,y
+          beq one
+          iny
+          cmp #","
+          bne o3
+          beq o2
+
+operr7    ldy filenr
+          ldx filetab+ANZ_FT*FT_STR,y
+          jsr FRESTR
+          ldx #7
+          .byt $2c
+operr6    ldx #6
+          .byt $2c
+operr9    ldx #9
+          .byt $2c
+operr3    ldx #3
+          .byt $2c
+operr2    ldx #2
+          stx reterr
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_DIR
+          bne ope
+          ldy #F_FL
+          lda #F_FL_FRE
+          sta (fzei),y
+          ldy filenr
+ope       lda #FT_MOD_FRE
+          sta filetab+ANZ_FT*FT_MOD,y
+          rts
+
+onex      inx
+          stx bufpos
+          bne one
+                    
+opout     ldx #FT_MOD_OUT
+          lda owfl
+          cmp #2         ; ow = overwrite
+          beq operr9     ; notreadfile
+          .byt $2c
+opin      ldx #FT_MOD_IN
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_DIR
+          bne opx
+          cpx #FT_MOD_OUT
+          beq one
+          bne operr2
+opx       txa
+          sta filetab+ANZ_FT*FT_MOD,y
+
+one       ldy filenr
+
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_FRE
+          beq operr3
+          jsr GETSTR
+          bcs operr6
+          ldy filenr
+          txa
+          sta PCBUF+FS_OPEN_STR
+          sta filetab+ANZ_FT*FT_STR,y
+          lda #0
+          sta PCBUF+FS_OPEN_PFAD
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_OUT
+          beq oo
+          cmp #FT_MOD_DIR
+          beq od
+          lda owfl
+          cmp #2
+          bne owr
+          lda #FS_OPEN_OW
+          .byt $2c
+owr       lda #FS_OPEN_WR
+          .byt $2c
+oo        lda #FS_OPEN_RD
+          .byt $2c
+od        lda #FS_OPEN_DR
+          ldx PCBUF+FS_OPEN_DRV
+          jsr assigndrv
+          stx PCBUF+FS_OPEN_DRV
+          pha
+          txa
+          ldy filenr
+          sta filetab+ANZ_FT*FT_DRV,y
+          pla
+          ldx #SEND_FM
+          ldy bufpos
+          jsr SEND
+          bcs operr7x
+          sec
+          jsr RECEIVE
+          cmp #1
+          bcs operr7xx
+          sta reterr
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_IN
+          beq oe
+          jsr getobuf
+          ldy filenr
+          sta filetab+ANZ_FT*FT_BYT,y
+          lda #2
+          bcc ow
+          ora #128
+ow        sta filetab+ANZ_FT*FT_ST,y
+oe        rts
+operr7xx  jsr fse2rete
+operr7x   jmp operr7
+          .)
+
+fgetdrv    .(
+drv       =sysmem
+gcmd      =sysmem+1
+bufpos2   =sysmem+2
+xfl       =sysmem+3
+-sysmem   +=4
+
+          ldx #0
+          .byt $2c
+&cgetdrv  ldx #<-1
+          stx xfl
+          
+          sty bufpos
+
+          lda #<-1    ; stddrv
+          sta drv
+          lda #0
+          sta gcmd
+
+g1        lda INBUF,y
+          beq nixxx
+          iny
+          cmp #":"
+          beq dp1x
+
+          cmp #"0"
+          bcc g1a
+          cmp #"9"+1
+          bcs g1a
+          and #%00001111
+          sta drv
+          lda INBUF,y
+          cmp #"0"
+          bcc g1x
+          cmp #"9"+1
+          bcs g1x
+          iny
+          pha
+          asl drv
+          lda drv
+          asl 
+          asl
+          clc
+          adc drv
+          sta drv
+          pla
+          and #%00001111
+          clc
+          adc drv
+          sta drv
+g1x       jmp gwend
+
+nixxx     beq nixx
+dp1x      beq dp1
+
+g1a       cmp #" "
+          beq g1
+
+          lda gcmd
+          bne gerr
+          
+          dey
+          sty bufpos2
+          ldx #1
+g2        stx gcmd
+          lda cmda-1,x
+          beq gerr
+          tax
+          ldy bufpos2
+g2a       lda cmdt-1,x
+          beq found
+          cmp INBUF,y
+          bne g2b
+          inx
+          iny
+          bne g2a
+
+g2b       cpy bufpos2
+          beq g2bq
+          
+          lda INBUF,y
+          cmp #"a"
+          bcc found
+          cmp #"z"+1
+          bcs found
+          
+g2bq      ldx gcmd
+          inx
+          cpx #3
+          bcc g2
+          bit xfl
+          bmi g2
+          ldx #0
+          stx gcmd
+          ldy bufpos2
+g2c       lda INBUF,y
+          beq nix
+dp1       beq dp
+          iny
+          cmp #":"
+          bne g2c
+          
+gerr      sec
+          rts
+
+found     jmp g1
+
+gwend     lda INBUF,y
+nixx      beq nix
+          iny
+          cmp #":"
+          beq dp
+          cmp #" "
+          beq gwend
+          bne gerr
+
+nix       lda gcmd
+          cmp #1         ; $
+          beq dp
+          bit xfl
+          bmi dp
+          lda #<-1       ; stddrv
+          ldx #0
+          ldy bufpos
+          clc
+          rts
+
+dp        lda drv
+          ldx gcmd
+          clc
+          rts
+
+cmda      .byt cmdt-c0,cow-c0,c2-c0,c3-c0,c4-c0,c5-c0,c6-c0,c7-c0 /*,c8-c0*/
+          .byt /*c9-c0,c10-c0,*/ c11-c0,c12-c0,c13-c0,c14-c0,c15-c0,0
+
+c0        =*-1
+cmdt      .asc "$",0
+cow       .asc "@",0
+c2        .asc "rename",0
+c3        .asc "scratch",0
+c4        .asc "copy",0
+c5        .asc "new",0
+c6        .asc "validate",0
+c7        .asc "initialize",0
+;c8        .asc "rmdir",0
+;c9        .asc "mkdir",0
+;c10       .asc "chdir",0
+c11       .asc "assign",0
+c12       .asc "cd",0
+c13       .asc "rd",0
+c14       .asc "md",0
+c15       .asc "drv",0      ; iec-bus-unit 
+
+&fsctab   .byt $ff,$ff,$ff,FS_RENAME,FS_DELETE,"c"
+          .byt FS_FORMAT,FS_CHKDSK,"i" /*,FS_RMDIR,FS_MKDIR,"d"*/
+          .byt "a","d",FS_RMDIR,FS_MKDIR,"u"
+          .)
+                  
+atndet2   jmp atndet
+
+talkloop  .(
+          lda #0
+          sta status
+          sta eoifl
+          lda secadr
+          and #15
+          sta filenr
+          cmp #15
+          beq tl1
+          tay
+          lda filetab+ANZ_FT*FT_MOD,y
+          and #127
+          cmp #FT_MOD_OUT
+          beq tl1
+          cmp #FT_MOD_DIR
+          beq tl1
+          cmp #FT_MOD_EOF
+          bne outerr9
+          beq tlx
+tl1       jsr tiecout
+          bcs atndet2
+          bit eoifl
+          bvc tl1
+          ldy filenr
+          lda #FT_MOD_EOF
+          sta filetab+ANZ_FT*FT_MOD,y
+tlx       jmp RETLOOP
+          
+outerr9   lda #9
+          sta reterr
+          jmp RETLOOP
+          .)
+          
+&getobuf  .(
+pos       =sysmem
+pos2      =sysmem+1
+pcnt      =sysmem+2
+-sysmem   +=3
+          ldy filenr
+          cpy #15
+          bne gofile
+          ldy outpos
+          cpy outlen
+          bcc tl3
+          jsr makeds
+tl3       ldy outpos
+          lda OUTBUF,y
+          iny
+          sty outpos
+          cpy outlen
+          rts
+
+gofile    
+          ldy filenr
+          lda filetab+ANZ_FT*FT_MOD,y
+          cmp #FT_MOD_DIR
+          beq godir
+          
+gfx       ldy filenr
+          lda filetab+ANZ_FT*FT_BYT3,y
+          ldx filetab+ANZ_FT*FT_STR,y
+          tay
+          jsr GETC
+          bcc gf1
+          cmp #E_EOF
+          beq gf2
+          jsr SUSPEND
+          jmp gfx
+gf2       tya
+          sec
+          rts
+gf1       tax
+          tya
+          pha
+          ldy filenr
+          txa
+          sta filetab+ANZ_FT*FT_BYT3,y
+          pla
+          ldx filetab+ANZ_FT*FT_MOD,y
+          bmi gfok
+          txa
+          ora #128
+          sta filetab+ANZ_FT*FT_MOD,y
+          jmp gfx
+gfok      clc
+          rts
+
+godir     
+          ldx filetab+ANZ_FT*FT_BUF,y
+          jsr setzei
+          ldy #F_LEN
+          lda (fzei),y
+          bne g1              ; L„nge gleich 0, dann wars das erste mal 
+          jsr gnew1           ; erste Zeile holen
+          jmp g2
+g1        ldy #F_BYT
+          cmp (fzei),y        ; auslesen am ende
+          bne g2              ; nein dann weiter
+          jsr gnew            ; sonst n„chste Zeile holen
+          bcs ge
+g2        ldy #F_BYT
+          lda (fzei),y
+          tay
+          lda (bzei),y
+          pha
+          iny
+          tya
+          ldy #F_BYT
+          sta (fzei),y
+          pla
+          clc
+ge        rts
+          
+gnew1     ldy #64             ; Startadresse in den Puffer
+          lda #1
+          sta (bzei),y
+          iny   
+          lda #4
+          sta (bzei),y
+          iny
+          jmp gnewend         ; und ende
+          
+gnew      ldy #F_FL
+          lda (fzei),y
+          cmp #F_FL_DOX       ; ende schon gewesen
+          bne gn1
+          lda #0              ; ja dann nullbyte
+          sec
+          rts        
+gn1       ldy #F_BYT
+          lda #0
+          sta (fzei),y        ; Anzahl Bytes erstmal auf null
+          
+gg        ldy filenr
+          lda filetab+ANZ_FT*FT_STR,y
+          tax
+          jsr GETC
+          bcc gok
+          cmp #E_EOF
+          beq geof
+          jsr SUSPEND
+          jmp gg
+          
+geof      ldy #F_FL           ; ende des Dirs
+          lda #F_FL_DOX
+          sta (fzei),y
+          ldy #64
+          lda #0
+          sta (bzei),y
+          iny
+          jmp gnewend
+          
+gok       tax                 ; byte geholt
+          ldy #F_BYT
+          lda (fzei),y
+          tay
+          txa
+          sta (bzei),y
+          iny
+          tya
+          ldy #F_BYT
+          sta (fzei),y
+          cmp #FS_DIR_NAME+1
+          bcc gg
+          cpx #0
+          bne gg
+          ; ab hier wird in neue Struktur umgewandelt
+
+          ldy #FS_DIR_LEN
+          lda (bzei),y
+          beq gs1
+          iny
+          lda (bzei),y
+          clc
+          adc #1
+          sta (bzei),y
+gs1       ldy #64             ; link-adresse
+          lda #4
+          sta (bzei),y
+          iny
+          sta (bzei),y
+          ldy #FS_DIR_LEN+1   ; Datei-L„nge
+          lda (bzei),y
+          sta pos
+          ldy #66
+          sta (bzei),y
+          ldy #FS_DIR_LEN+2
+          lda (bzei),y
+          sta pos2
+          ldy #67
+          sta (bzei),y          
+          
+          ldy #FS_DIR_MODE
+          lda (bzei),y
+          ldy #68
+          cmp #FS_DIR_MOD_FIL
+          beq dirfil
+          cmp #FS_DIR_MOD_DIR
+          beq dirfil
+          jmp dirother
+dirfil    lda #0
+          sta pcnt
+          ldx pos
+          lda pos2
+          cmp #>10000
+          bcc d1b
+          bne d1
+          cpx #<10000
+          bcs d1
+d1b       inc pcnt
+          cmp #>1000
+          bcc d1c
+          bne d1
+          cpx #<1000
+          bcs d1
+d1c       inc pcnt
+          cmp #>100
+          bne d1
+          cpx #100
+          bcs d1
+          inc pcnt
+          cpx #10
+          bcs d1
+          inc pcnt
+d1        ldx pcnt
+          ; y=schreibposition in Puffer
+          lda #" "
+gs2       dex
+          bmi gs2x
+          sta (bzei),y
+          iny
+          bne gs2
+gs2x      lda #34
+          sta (bzei),y
+          iny
+          sty pos
+          ldy #FS_DIR_NAME
+          sty pos2
+          ldx #17
+gs4       ldy pos2
+          lda (bzei),y
+          beq gs3
+          dex
+          inc pos2
+          ldy pos
+          jsr ASC2CBM
+          sta (bzei),y
+          inc pos
+          cpy #66+24    ; sicherheitshalber range test
+          bcc gs4
+gs3       ldy pos
+          lda #34
+          sta (bzei),y
+          iny
+          lda #" "
+gs5       dex
+          bmi gs5x
+          sta (bzei),y
+          iny
+          bne gs5
+gs5x      ldx #0
+          tya
+          pha
+          ldy #FS_DIR_MODE
+          lda (bzei),y
+          cmp #FS_DIR_MOD_DIR
+          beq gs6d
+          pla
+          tay
+gs6a      lda prgtxt,x
+          sta (bzei),y
+          iny
+          inx
+          cpx #3
+          bcc gs6a
+          bcs gs6b
+gs6d      pla
+          tay
+gs6c      lda dirtxt,x
+          sta (bzei),y
+          iny
+          inx
+          cpx #3
+          bcc gs6c
+gs6b      lda #0
+          sta (bzei),y
+          iny
+     
+gnewend   tya
+          ldy #F_LEN
+          sta (fzei),y
+          lda #64
+          ldy #F_BYT
+          sta (fzei),y
+          clc
+          rts
+          
+prgtxt    .asc "PRG"
+dirtxt    .asc "DIR"
+
+dirother  cmp #FS_DIR_MOD_NAM
+          bne dirfre
+          .(
+          ldy #66
+          ldx filenr
+          lda filetab+ANZ_FT*FT_DRV,x
+          sta (bzei),y
+          iny
+          lda #0
+          sta (bzei),y
+          iny
+          lda #18
+          sta (bzei),y
+          iny
+          lda #34
+          sta (bzei),y
+          iny
+          sty pos
+          lda #FS_DIR_NAME
+          sta pos2
+          ldx #15
+l1        ldy pos2
+          lda (bzei),y
+          beq l2
+          inc pos2
+          ldy pos
+          jsr ASC2CBM
+          sta (bzei),y
+          inc pos
+          dex
+          bpl l1
+          bmi l3
+l2        lda #32
+          ldy pos
+          sta (bzei),y
+          inc pos
+          dex
+          bpl l2
+l3        ldy pos
+          lda #34
+          sta (bzei),y
+          iny
+          ldx #6
+          lda #32
+l4        sta (bzei),y
+          iny
+          dex
+          bpl l4
+          lda #0
+          sta (bzei),y
+          iny
+          jmp gnewend 
+          .)         
+          
+dirfre    .(
+          ldx #0
+l1        lda fretxt,x
+          sta (bzei),y
+          iny
+          inx
+          cmp #0
+          bne l1   
+          jmp gnewend
+          
+fretxt    .asc " BLOCKS FREE",0
+          .)
+           
+          .)
+
+makeds    .(
+          lda reterr
+          beq m0
+          clc
+          adc #19
+m0        ldx #"0"
+m1        cmp #10
+          bcc m2
+          sec
+          sbc #10
+          inx
+          bne m1        
+m2        clc
+          adc #$30
+          sta OUTBUF+1
+          stx OUTBUF
+          lda #","
+          sta OUTBUF+2
+          lda #" "
+          sta OUTBUF+3
+          ldy reterr
+          ldx #4
+          lda tadr,y
+          tay
+m3        lda dstxt,y
+          sta OUTBUF,x
+          beq m4
+          iny
+          inx
+          bne m3
+m4        ldy #0
+m4b       lda stdtxt,y
+          sta OUTBUF,x
+          beq m5
+          iny
+          inx
+          bne m4b
+m5        stx outlen
+          ldx #0
+          stx reterr
+          stx outpos
+          rts
+
+tadr      .byt t0-t,t1-t,t2-t,t3-t,t4-t,t5-t,t6-t,t7-t,t8-t,t9-t,t10-t
+          .byt t11-t,t12-t,t13-t,t14-t,t7-t,t15-t,t16-t,t17-t,t18-t
+
+stdtxt    .asc ",00,00",13,0
+
+dstxt t t0 .asc "OK",0
+t1        .asc "FILE NOT OPEN",0
+t2        .asc "NOT WRITE FILE",0
+t3        .asc "SYNTAX",0
+t4        .asc "FILE OPEN",0
+t5        .asc "CMD TO LONG",0
+t6        .asc "NO BUFFER",0
+t7        .asc "FILE NOT FOUND",0
+t8        .asc "WRITE ERROR",0
+t9        .asc "NOT READ FILE",0
+t10       .asc "NO DRIVE",0
+t11       .asc "WRITE PROTECT",0
+t12       .asc "DRIVE NOT READY",0
+t13       .asc "NO VALID PATH",0
+t14       .asc "NO VALID NAME",0
+t15       .asc "INVALID DATA",0
+t16       .asc "FILE EXIST",0
+t17       .asc "DISK FULL",0
+t18       .asc "DIR NOT EMPTY",0
+          .)
+          
+sendcmd   .(
+drv       =sysmem
+pos       =sysmem+1
+ccmd      =sysmem+2
+str       =sysmem+3
+dy        =sysmem+4
+-sysmem   +=5
+          ldy #0
+          jsr cgetdrv
+          bcs scerr3
+          sta drv
+          sta PCBUF+FS_CMD_DRV
+          sty pos
+          lda fsctab,x
+          sta ccmd
+#ifdef SHOW
+          pha
+          jsr HEXOUT
+          pla
+#endif         
+          cmp #"a"
+          bcs xcmd
+          cmp #FS_FORMAT
+          bne nof
+          jmp fformat
+nof       ldx INBUF,y
+          beq noname
+          cmp #FS_RENAME
+          bne nam
+          jmp doubnam
+nam       ldy pos
+          ldx #FS_CMD_NAME
+          jsr inspfad
+nl        lda INBUF,y
+          sta PCBUF,x
+#ifdef SHOW
+          jsr OUT
+          cmp #0
+#endif
+          beq ne
+          inx
+          iny
+          bne nl
+ne        inx
+n1x       txa
+          tay
+          jmp n1
+noname    lda #0
+          sta PCBUF+FS_CMD_NAME
+          ldy #FS_CMD_NAME+1
+n1        
+#ifdef SHOW
+          jsr CRLFOUT
+#endif
+          lda #0
+          sta PCBUF+FS_CMD_PFAD
+n4        ldx PCBUF+FS_CMD_DRV
+          jsr assigndrv
+          stx PCBUF+FS_CMD_DRV
+          ldx #SEND_FM
+          lda ccmd
+          jsr SEND
+          bcs scerr10
+          sec
+          jsr RECEIVE
+          cmp #1
+          bcc scerr0
+scerrfs   jsr fse2rete
+          tax
+          .byt $2c
+scerr0    ldx #0
+          .byt $2c
+scerr6    ldx #6
+          .byt $2c
+scerr3    ldx #3
+          .byt $2c
+scerr10   ldx #10
+          stx reterr
+          rts
+       
+xcmd      .(
+          cmp #"i"
+          beq scerr0
+          cmp #"c"
+          bne o1
+          jmp copy
+o1        cmp #"a"
+          bne o2
+          jmp assign
+o2        cmp #"d"
+          bne o3
+          jmp cdir
+o3        cmp #"u"
+          bne o4
+          jmp unit
+o4        jmp scerr3     ; syntax
+
+          .(
+assigntab =sysmem
+-sysmem   +=10
+
+&assign   ldy pos
+a1        lda INBUF,y
+          beq scerr3
+          iny
+          cmp #" "
+          beq a1
+          cmp #"0"
+          bcc scerr3
+          cmp #"9"+1
+          bcs scerr3
+          and #$0f
+
+          ldx PCBUF+FS_CMD_DRV
+          sec
+          jsr Assign
+          bcs scerr10
+/*
+          ldy PCBUF+FS_CMD_DRV
+          cpy #10
+          bcs scerr10
+          sta assigntab,y
+*/
+          jmp scerr0
+
+&&&&&iniass
+          sec
+          ldx #<-1
+          jmp Assign
+/*
+          ldx #0
+ai        txa
+          sta assigntab,x
+          inx
+          cpx #10
+          bcc ai
+          clc
+          rts
+*/
+
+&&&assigndrv
+          clc
+          jmp Assign
+/*
+          pha
+          cpx #10
+          bcs ae
+          lda assigntab,x
+          tax
+ae        pla
+          rts
+*/
+          .)
+          
+scerr6x   bcs scerr6
+
+copy      .(
+          ldy pos 
+cn1       lda INBUF,y
+          beq scerr3
+          cmp #"="
+          beq infile
+          iny
+          bne cn1 
+scerr3z   jmp scerr3
+infile    iny
+          jsr fgetdrv
+          bcs scerr3z
+          cpx #0
+          bne scerr3z
+          sta PCBUF+FS_OPEN_DRV
+          ldx #FS_OPEN_NAME
+          jsr inspfad
+i3        lda INBUF,y
+          sta PCBUF,x
+          inx
+          iny
+          cmp #0
+          bne i3
+          stx dy
+          lda #0
+          sta PCBUF+FS_OPEN_PFAD
+          jsr GETSTR
+          bcs scerr6x
+          ldy dy
+          stx str
+          stx PCBUF+FS_OPEN_STR
+          ldx PCBUF+FS_OPEN_DRV
+          jsr assigndrv
+          stx PCBUF+FS_OPEN_DRV
+          ldx #SEND_FM
+          lda #FS_OPEN_RD
+          jsr SEND
+          bcs i4a
+          sec
+          jsr RECEIVE
+          cmp #1
+          bcc i4
+i4a       pha
+          ldx str
+          jsr FRESTR
+          pla
+          jmp scerrfs
+i4        lda drv
+          sta PCBUF+FS_OPEN_DRV
+          lda str
+          sta PCBUF+FS_OPEN_STR
+          lda #0
+          sta PCBUF+FS_OPEN_PFAD
+          ldy pos
+          ldx #FS_OPEN_NAME
+          jsr inspfad
+i5        lda INBUF,y
+          cmp #"="
+          beq ie
+          sta PCBUF,x
+          inx
+          iny
+          bne i5
+ie        lda #0
+          sta PCBUF,x
+          inx
+          txa
+          tay
+          ldx PCBUF+FS_OPEN_DRV
+          jsr assigndrv
+          stx PCBUF+FS_OPEN_DRV
+          lda #FS_OPEN_WR
+          ldx #SEND_FM
+          jsr SEND
+          bcs i6
+          sec
+          jsr RECEIVE
+          cmp #1
+          bcc i7
+i6        pha
+          ldx str
+          lda #SC_NUL
+          jsr STRCMD
+          pla
+          jmp scerrfs
+i7        rts
+          .)
+
+
+&&&&&iniunit 
+          .(
+          lda #10+$20
+          sta lstnadr
+          eor #$60
+          sta talkadr
+          clc
+          rts
+          .)
+          
+unit      .(
+          lda PCBUF+FS_OPEN_DRV
+          cmp #31
+          bcs scerr3u
+          ora #$20
+          sta lstnadr
+          eor #$60
+          sta talkadr
+          clc
+          rts
+          .)
+scerr3u   jmp scerr3
+
+cdir      .(
+pdrv      =sysmem
+pfad      =sysmem+1
+-sysmem   +=1+MAXLEN
+
+          ldy pos
+          ldx #FS_CMD_NAME
+p1        lda INBUF,y
+          sta PCBUF,x
+          beq p2
+          inx
+          iny
+          bne p1
+p2        lda #<pdrv
+          ldy #>pdrv
+          ldx #MAXLEN
+          jsr Chdir
+          jmp scerr0
+/*
+          lda drv
+          bmi cderr10
+          sta pdrv
+          ldy pos
+          ldx #0
+p1        lda INBUF,y
+          sta pfad,x
+#ifdef SHOW
+          jsr OUT
+          cmp #0
+#endif
+          beq endp
+          inx
+          iny
+          cpx #MAXLEN-2
+          bcc p1
+          lda #0
+          sta pfad
+*/
+&&scerr3x jmp scerr3
+/*
+endp      dex
+          bmi set
+          lda pfad,x
+          cmp #DIRSIGN
+          beq sc0
+set       inx
+          lda #DIRSIGN
+          sta pfad,x
+          lda #0
+          sta pfad+1,x
+sc0       jmp scerr0
+cderr10   jmp scerr10
+*/
+
+&&&&&inipfad
+          lda #0
+          sta pdrv
+          sta pfad
+          rts
+
+&&&inspfad
+          sty dy
+          lda PCBUF+FS_OPEN_DRV
+          bpl nopfad
+          lda pdrv
+          sta PCBUF+FS_OPEN_DRV
+
+          lda INBUF,y
+          cmp #DIRSIGN
+          beq nopfad
+
+          ldy #0
+ip1       lda pfad,y
+          beq ipe
+          sta PCBUF,x
+          inx
+          iny
+          bne ip1
+ipe       lda #DIRSIGN
+          sta PCBUF,x
+          inx 
+nopfad    ldy dy
+          rts
+          .)
+          
+          .)
+
+/*scerr3x   jmp scerr3*/
+
+doubnam   .(
+          ldy pos
+dn        lda INBUF,y
+          beq scerr3x
+          cmp #"="
+          beq nextnam
+          iny
+          bne dn
+nextnam   iny
+          ldx #FS_CMD_NAME
+          jsr inspfad
+n2        lda INBUF,y
+          sta PCBUF,x
+          beq secnam
+          inx
+          iny
+          bne n2
+secnam    inx
+          ldy pos
+n3        lda INBUF,y
+          cmp #"="
+          beq endnam
+          sta PCBUF,x
+          iny
+          inx
+          bne n3
+endnam    lda #0
+          sta PCBUF,x
+          inx
+          jmp n1x
+          .)
+
+fformat   .(
+          lda #0
+          sta PCBUF+FS_CMD_PFAD    ; format
+          ldx #FS_CMD_NAME
+f1        lda INBUF,y
+          sta PCBUF,x
+          beq fe
+          inx
+          iny
+          cmp #","
+          bne f1
+          dex
+          lda #0
+          sta PCBUF,x
+f2        lda INBUF,y
+          beq scerr3y
+          iny
+          cmp #" "
+          beq f2
+          cmp #"0"
+          bcc scerr3y
+          cmp #"9"+1
+          bcs scerr3y
+          and #15
+          sta PCBUF+FS_CMD_PFAD
+#ifdef SHOW
+          pha
+          lda #"X"
+          jsr OUT
+          pla
+          jsr HEXOUT
+#endif
+fe        inx
+          txa
+          tay
+          jmp n4
+scerr3y   jmp scerr3       
+          .)
+          
+          .)
+          
+fse2rete  .(
+          ldy #11
+f1        cmp fsetab,y
+          beq rete
+          dey
+          bpl f1
+          lda #7
+          rts
+rete      lda retetab,y
+          rts
+
+fsetab    .byt E_OK,E_FNODRV,E_FNOPATH,E_FNONAM,E_FNOFIL,E_FWPROT
+          .byt E_NOCLUS,E_INVDATA,E_FILEXIST,E_DISKFULL,E_DNEMPTY
+          .byt E_FOPEN
+retetab   .byt 0,12,13,14,15,11
+          .byt 13,16,17,18,19,4
+          .)
+          
+          .)
+
+#endif
+
+/* Blocktiefe 2 */
+
+#ifndef NOFS
+
+&TALK     lda devadr
+          ora #$40
+          bne aout
+&LISTEN   lda devadr
+          ora #$20
+aout      pha
+          lda #0
+          sta status
+          jsr nrfdhi
+          jsr ndachi
+         
+          lda errfl
+          beq oo1
+          sec
+          ror eoifl
+          jsr iecout
+          lda #0
+          sta errfl
+
+oo1       pla
+          sta byte
+          jsr waitdavhi
+          jsr atnlo
+
+iecout    .(
+          sei
+          jsr davhi
+          jsr tstdev     ;nrfdhi & ndachi = z
+          beq devnotpr
+          lda byte
+          jsr out
+ox1       JSR setti
+ox1a      JSR fragti
+          BNE XTO
+          lda VIA1+VIA_DRB
+          bpl ox1a       ; wait nrfd hi
+          lda eoifl
+          bpl o0
+          jsr eoilo
+o0        jsr davlo
+          jsr setti
+o1        jsr fragti
+          bne timeout
+          jsr fragndac   ; wait ndac hi
+          bcc o1
+          jsr davhi
+          jsr eoihi
+          lsr eoifl
+          jsr clrdata    ; alle data hi
+ox2       lda VIA1+VIA_DRB
+          lsr
+          bcs ox2        ; wait ndaclo
+          clc
+          cli
+          rts
+          
+XTO       JSR SUSPEND
+          SEI
+          JMP ox1
+          .)
+          
++SECLISTEN lda secadr
+          ora #$60
+&seclisten sta byte
+          jsr iecout
+          jsr atnhi
+          cli
+          rts
+#endif
+
+timeout   lda #1
+          .byt $2c
+devnotpr  lda #128
+          jsr seterr
+          jsr eoihi
+          jsr davhi
+          jsr ndachi
+          sec
+          cli
+          rts
+          
+#ifndef NOLOOP
+tiecout   .(
+          ldy filenr
+          lda filetab+ANZ_FT*FT_ST,y
+          tax
+          and #2
+          bne to1
+          cli
+          jsr getobuf
+          sei
+          ldy filenr
+          sta filetab+ANZ_FT*FT_BYT,y
+          lda #2
+          bcc to2
+          ora #128
+to2       ora filetab+ANZ_FT*FT_ST,y
+          sta filetab+ANZ_FT*FT_ST,y
+          tax
+to1       txa
+          and #128
+          sta eoifl
+          lda filetab+ANZ_FT*FT_BYT,y
+          sta byte
+          sei
+          jsr davhi
+          jsr tstdev     ;nrfdhi & ndachi = z
+          beq devnotpr
+          lda byte
+          jsr out
+ox1       jsr fragatn
+          bcs atnin
+          lda VIA1+VIA_DRB
+          bpl ox1        ; wait nrfd hi
+          bit eoifl
+          bpl o0
+          jsr eoilo
+o0        jsr davlo
+
+/* n„chstes Byte holen zur Ausgabe                */
+/* Verhindert time out beim n„chsten IECIN des    */
+/* Listeners                                      */
+
+          ldy filenr
+          lda filetab+ANZ_FT*FT_ST,y
+          and #1+128
+          bne o3
+          cli
+          jsr getobuf
+          sei
+          ldy filenr
+          sta filetab+ANZ_FT*FT_BYT2,y
+          lda #1
+          bcc o3x
+          ora #64
+o3x       ora filetab+ANZ_FT*FT_ST,y
+          sta filetab+ANZ_FT*FT_ST,y
+
+o3        jsr setti
+o1        jsr fragti
+          bne timeouty
+          jsr fragatn
+          bcs atnin
+          jsr fragndac   ; wait ndac hi
+          bcc o1
+          
+          ldy filenr
+          lda filetab+ANZ_FT*FT_ST,y
+          asl
+          and #%10000010
+          sta filetab+ANZ_FT*FT_ST,y
+          lda filetab+ANZ_FT*FT_BYT2,y
+          sta filetab+ANZ_FT*FT_BYT,y
+          lsr eoifl
+          
+          jsr davhi
+          jsr eoihi
+
+          jsr clrdata    ; alle data hi
+ox2       jsr fragatn
+          bcs atnin
+          lda VIA1+VIA_DRB
+          lsr
+          bcs ox2        ; wait ndaclo
+          clc
+          ;cli
+          rts
+
+atnin     sec
+          cli
+          rts
+
+timeouty  jmp timeout
+
+&liecin   .(
+          sei
+          jsr ndaclo
+          jsr nrfdhi
+i1        jsr fragatn    ; wait nrfd hi
+          bcs atnin
+          lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne i1
+          asl
+          bcc i1
+          jsr setti
+o11       jsr fragatn    ; atn testen
+          bcs atnin
+          jsr fragti
+          bne timeouty    ; c= abgelaufen
+          jsr fragdav    ; wait dav lo
+          bcs o11
+          jsr nrfdlo
+          jsr frageoi
+          bcs o12
+          lda #64
+          jsr seterr
+o12       jsr bytin
+          pha
+          jsr ndachi
+o12a      jsr fragatn    
+          bcs atnin
+          jsr fragdav
+          bcc o12a 
+          jsr ndaclo
+          lda status
+          bne o12c
+          pla
+          clc
+          CLI
+          rts
+o12c      pla
+          sec
+          cli
+          rts
+          .)
+          
+fragatn   .(
+          lda VIA1+VIA_DRA
+;          cmp VIA1+VIA_DRA
+;          bne fragatn
+          asl
+          eor VIA1+VIA_DRB
+          and #%00100000
+#ifdef INVERT
+          beq s               ; bei inverted umdrehen
+#else
+          bne s
+#endif
+          clc
+          rts
+s         sec
+          rts
+          .)
+          .)
+#endif
+
+#ifndef NOFS
+
++SECTALK  lda secadr
+          ora #$60
+&sectalk   sta byte
+          jsr iecout
+          jsr nrfdlo
+          jsr ndaclo    
+          jsr atnhi
+          rts
+
++IECOUT   bit errfl
+          bmi oo2
+          dec errfl
+          clc
+          bne oo3
+oo2       pha
+          jsr iecout
+          pla
+oo3       sta byte
+          lda status
+          cmp #1         ; ungleich 0 = c
+          rts
+
+&UNTALK   jsr atnlo
+          lda #95
+          .byt $2c
+&UNLISTEN lda #63
+          jsr aout
+          jsr atnhi
+          cli
+          rts
+          
+timeoutx  jmp timeout
+
+&IECIN    .(
+          sei
+          jsr ndaclo
+          jsr nrfdhi
+i1        lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne i1
+          asl
+          bcc i1
+          jsr setti
+o11       jsr fragti
+          bne timeoutx    ; c= abgelaufen
+          jsr fragdav    ; wait dav lo
+          bcs o11
+          jsr nrfdlo
+          jsr frageoi
+          bcs o12
+          lda #64
+          jsr seterr
+o12       jsr bytin
+          pha
+          jsr ndachi
+o12a      jsr fragdav
+          bcc o12a 
+          jsr ndaclo
+          lda status
+          bne o12c
+          pla
+          clc
+          cli
+          rts
+o12c      pla
+          sec
+          cli
+          rts
+          .)
+
+#ifdef INVERT          
+atnlo     lda VIA1+VIA_DRB
+          ora #%00100100
+          sta VIA1+VIA_DRB
+          rts
+atnhi     lda VIA1+VIA_DRB
+          and #%11011011
+          sta VIA1+VIA_DRB
+          rts
+#else
+atnhi     lda VIA1+VIA_DRB
+          ora #%00100100
+          sta VIA1+VIA_DRB
+          rts
+atnlo     lda VIA1+VIA_DRB
+          and #%11011011
+          sta VIA1+VIA_DRB
+          rts
+#endif
+#endif
+
+#ifdef INVERT
+#ifndef NOLOOP
+atnalo    lda VIA1+VIA_DRB
+          ora #%00100000
+          sta VIA1+VIA_DRB
+          rts
+atnahi    lda VIA1+VIA_DRB
+          and #%11011111
+          sta VIA1+VIA_DRB
+          rts
+#endif
+
+eoilo     lda VIA1+VIA_DRB
+          ora #%00010000
+          sta VIA1+VIA_DRB
+          rts
+eoihi     lda VIA1+VIA_DRB
+          and #%11101111
+          sta VIA1+VIA_DRB
+          rts
+
+ndaclo    lda VIA1+VIA_DRB
+          ora #%00001000
+          sta VIA1+VIA_DRB
+          rts
+ndachi    lda VIA1+VIA_DRB
+          and #%11110111
+          sta VIA1+VIA_DRB
+          rts
+
+nrfdlo    lda #60
+          sta PIA1+PIA_CRB
+          rts
+nrfdhi    lda #52
+          sta PIA1+PIA_CRB
+          rts
+
+davlo     lda #60
+          sta PIA1+PIA_CRA
+          rts
+davhi     lda #52
+          sta PIA1+PIA_CRA
+          rts
+#else
+#ifndef NOLOOP
+atnahi    lda VIA1+VIA_DRB
+          ora #%00100000
+          sta VIA1+VIA_DRB
+          rts
+atnalo    lda VIA1+VIA_DRB
+          and #%11011111
+          sta VIA1+VIA_DRB
+          rts
+#endif
+
+eoihi     lda VIA1+VIA_DRB
+          ora #%00010000
+          sta VIA1+VIA_DRB
+          rts
+eoilo     lda VIA1+VIA_DRB
+          and #%11101111
+          sta VIA1+VIA_DRB
+          rts
+
+ndachi    lda VIA1+VIA_DRB
+          ora #%00001000
+          sta VIA1+VIA_DRB
+          rts
+ndaclo    lda VIA1+VIA_DRB
+          and #%11110111
+          sta VIA1+VIA_DRB
+          rts
+
+nrfdhi    lda #60
+          sta PIA1+PIA_CRB
+          rts
+nrfdlo    lda #52
+          sta PIA1+PIA_CRB
+          rts
+
+davhi     lda #60
+          sta PIA1+PIA_CRA
+          rts
+davlo     lda #52
+          sta PIA1+PIA_CRA
+          rts
+#endif
+
+waitdavhi lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne waitdavhi
+          and #$40
+          beq waitdavhi
+          rts
+
+tstdev    lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne tstdev
+          and #%10000001
+          cmp #%10000001
+          rts
+
+#ifdef INVERT
+clrdata   lda #0
+          sta PIA1+PIA_PB
+          rts
+
+out       sta PIA1+PIA_PB
+          rts
+#else
+clrdata   lda #<-1
+          sta PIA1+PIA_PB
+          rts
+
+out       eor #$ff
+          sta PIA1+PIA_PB
+          rts
+#endif
+
+waitnrfdhi
+          lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne waitnrfdhi
+          asl
+          bcc waitnrfdhi
+          rts
+
+fragndac  lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne fragndac
+          lsr
+          rts
+
+fragdav   lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne fragdav
+          asl
+          asl
+          rts
+
+seterr    ora status
+          sta status
+          rts
+
+bytin     lda PIA1+PIA_PA
+          eor #$ff
+          rts
+
+&setti    lda #<65000
+          sta VIA1+VIA_T1CL
+          lda #>65000     
+          sta VIA1+VIA_T1CH
+          rts
+&fragti   lda VIA1+VIA_IFR
+          and #%01000000
+          rts
+
+frageoi   lda VIA1+VIA_DRB
+          cmp VIA1+VIA_DRB
+          bne frageoi
+          lsr
+          lsr
+          rts
+
+          .)
+
+#print syszp
+#print sysmem
+#print sysblk
+                
+#ifdef STDTST
+#define   ROM
+#include  "stdio.a65"
+#endif
+
+ende      .)
+

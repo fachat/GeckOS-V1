@@ -1,0 +1,113 @@
+
+#ifndef NOMMU
+#define   MBLOCKS   256
+#else
+#define   MBLOCKS   16
+#endif
+
+          .(
+#ifdef NOMMU
+MEMVAL    =sysmem
+MEMFRE    =sysmem+MBLOCKS/8
+div       =sysmem+MBLOCKS/4
+-sysmem   +=1+MBLOCKS/4
+#else
+MEMVAL    =syszp
+MEMFRE    =syszp+MBLOCKS/8
+div       =syszp+MBLOCKS/4
+-syszp    +=1+MBLOCKS/4
+#endif
+
++inimem   ldy #MBLOCKS/8
+          lda #0
+l1        sta MEMVAL,y
+          sta MEMFRE,y
+          dey
+          bpl l1
+          clc
+          rts
+
++getmem   jsr memsys
+          ldx #0
+l2        lda MEMVAL,x
+          and MEMFRE,x
+          beq gnext
+          ldy #7
+l3        asl
+          bcs found
+          dey
+          bpl l3
+found     lda POT2,y
+          eor #$FF
+          and MEMFRE,x
+          sta MEMFRE,x
+          txa
+          asl
+          asl
+          asl
+          sta div
+          tya
+          clc
+          adc div
+          tax
+          lda #E_OK
+          jmp gne
+gnext     inx
+          cpx #MBLOCKS/8
+          bcc l2
+notfre    lda #E_NOMEM
+          .byt $2c
+gne       lda #E_OK
+          jsr memtask
+          cmp #1
+          rts
+
++fremem   jsr memsys
+#ifdef NOMMU
+          cpx #MBLOCKS
+          bcs notfre
+#endif
+          jsr gsetxy
+          ora MEMFRE,x
+          and MEMVAL,x
+          sta MEMFRE,x
+          lda #E_OK
+          jsr memtask
+          clc
+          rts
+
++enmem    jsr memsys
+#ifdef NOMMU
+          cpx #MBLOCKS
+          bcs notfre
+#endif
+          jsr gsetxy
+          ora MEMVAL,x
+          sta MEMVAL,x
+          lda POT2,y
+          ora MEMFRE,x
+          sta MEMFRE,x
+          lda #E_OK
+          jsr memtask
+          clc
+          rts
+
++getblk   jsr memsys
+#ifdef NOMMU
+          cpx #MBLOCKS
+          bcs notfre
+#endif
+          jsr gsetxy
+          and MEMFRE,x
+          and MEMVAL,x
+          beq notfre
+          lda POT2,y
+          eor #$ff
+          and MEMFRE,x
+          sta MEMFRE,x
+          lda #E_OK
+          jsr memtask
+          clc
+          rts
+          .)
+

@@ -1,0 +1,141 @@
+
+#define   ANZINSTR  16
+
+          .(
+          .word spoolend
+          jmp spoolprg
+          .asc "spooler",0
+
+anzinstr  =sysmem
+outstr    =sysmem+1
+status    =sysmem+2
+byte      =sysmem+3
+instr     =sysmem+4
+-sysmem   +=4+ANZINSTR
+
+spoolprg  cmp #DC_RES
+          bne sp1
+          
+          lda #0
+          sta anzinstr
+          sta status
+          clc
+          rts
+
+sp1       cmp #DC_IRQ
+          bne sp2
+
+          lda status
+          and #DC_SW_RX
+          beq spi1
+          lda status
+          and #DC_SW_TX
+          beq spi4
+spil      lda status
+          and #1
+          bne spi2
+          ldx instr
+          jsr GETC
+          bcc spi2b
+          cmp #E_EOF
+          bne spi4
+
+          ldx instr
+          lda #SC_NUL
+          jsr STRCMD
+
+          dec anzinstr
+          beq rxoff
+          ldx #0
+spi3      lda instr+1,x
+          sta instr,x
+          cpx anzinstr
+          bcs sp4
+          inx
+          bne spi3
+
+spi2b     sta byte
+          lda #1
+          ora status
+          sta status
+spi2      lda byte
+          ldx outstr
+          jsr PUTC
+          bcs spi5
+          lda status
+          and #%11111110
+          sta status
+          jmp spil
+
+spi4      ldx outstr
+          lda #SC_STAT
+          jsr STRCMD
+
+spi5      cmp #E_NUL
+          beq rxoff
+spi1      clc
+          rts
+
+sp2       cmp #DC_RX_OFF
+          beq rxoff
+          cmp #DC_TX_OFF
+          bne sp3
+rxoff     lda status
+          and #DC_SW_RX
+          beq spe4
+          ldx outstr
+          lda #SC_EOF
+          jsr STRCMD
+spe4      lda status
+          and #DC_SW_TX
+          beq spe1
+          ldx #0
+spe2      cpx anzinstr
+          bcs spe1
+          lda #SC_NUL
+          jsr STRCMD
+          inx
+          bne spe2
+spe1      lda #0
+          sta anzinstr
+          sta status
+          beq ok
+
+sp3       cmp #DC_RX_ON
+          bne sp4
+          lda #DC_SW_RX
+          bne setst
+sp4       cmp #DC_TX_ON
+          bne sp5
+          lda #DC_SW_TX
+setst     ora status
+          sta status
+ok        lda #0
+          .byt $2c
+spdevon   lda #E_DON
+          .byt $2c
+sp7       lda #E_NOTIMP
+          cmp #1
+          rts
+
+sp5       cmp #DC_GS
+          bne sp6
+          lda status
+          ldx anzinstr
+          cpx #ANZINSTR
+          bcs spdevon 
+          tya
+          sta instr,x
+          inc anzinstr
+          jmp ok
+
+sp6       cmp #DC_PS
+          bne sp7
+          lda status
+          and #DC_SW_RX
+          bne spdevon
+          sty outstr
+          jmp ok
+
+spoolend  .)
+

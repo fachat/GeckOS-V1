@@ -1,0 +1,67 @@
+
+#ifndef   ANZSTR
+
+#ifndef NOMMU
+
+/************************* Daten fÅr Computer mit MMU *********************/
+
+/*        StreamData                    */
+
+#define   ANZSTRM   18
+
+/*        SemaphoreData                 */
+
+#define   ANZSEM    16        /* vielfaches von 8 */
+#define   SYSSEM    16        /* vielfaches von 8, sem-nr von -SYSSEM bis -1 */
+
+/*        DeviceData                    */
+
+#define   MAXDEV    32
+
+/*        EnvData                       */
+
+#define   ANZENV    16        /* ANZENV*TE_SLEN<256    */
+#define   ANZXENV   16        /* Anzahl umleitbarer Tasks   */
+
+/*        TaskData                      */
+
+#define   IRQCNT    3
+
+/*        FileManager                   */
+
+#define   MAXFS     8
+
+#else
+
+/************************ Daten fÅr Computer ohne MMU *********************/
+
+/*        StreamData                    */
+
+#define   ANZSTRM   8
+
+/*        SemaphoreData                 */
+
+#define   ANZSEM    8         /* vielfaches von 8 */
+#define   SYSSEM    8         /* vielfaches von 8, sem-nr von -SYSSEM bis -1 */
+
+/*        DeviceData                    */
+
+#define   MAXDEV    16
+
+/*        EnvData                       */
+
+#define   ANZENV    6         /* (Stackpage-64)/32          */
+#define   ANZXENV   6         /* Anzahl umleitbarer Tasks   */
+
+/*        TaskData                      */
+
+#define   IRQCNT    3
+
+/*        FileManager                   */
+
+#define   MAXFS     4
+
+#endif
+
+#endif
+

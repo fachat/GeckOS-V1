@@ -1,0 +1,587 @@
+
+          .(
+pz        =syszp
+cnt       =syszp+2
+-syszp    +=3
+
+#ifndef NOMMU
+s1        =syszp
+s2        =syszp+1
+-syszp    +=2
+#else
+s1        =sysmem
+s2        =sysmem+1
+-sysmem   +=2
+#endif
+
+#ifndef NOMMU
+mmu       .byt SYSPAGE,1,2,3,4,5,6,7,8,9,$a,$b,$c,$d,$e,$f
+          ;.byt 0,1,2,3,4,5,6,7,$c,$d,$e,8,9,$a,$b,$18
+#endif
+
++preset   sei 
+          cld
+#ifndef NOMMU
+          ldx #<-2
+#else
+          ldx #<-1
+#endif
+          txs
+     
+#ifndef ROMTEST
+
+#ifndef NOMMU
+          ldx #15
+res1      lda mmu,x
+          sta MMU,x
+          dex
+          bpl res1
+#endif
+
+          ldx #0
+mtl1      lda #$55
+          sta 0,x
+          cmp 0,x
+          bne mtl1e
+          asl
+          sta 0,x
+          cmp 0,x
+          bne mtl1e
+          lda #0
+          sta 0,x
+          cmp 0,x
+          bne mtl1e
+          inx
+          bne mtl1
+
+          ; GESPIEGELTER SPEICHER TESTEN 256-Byte-weise
+
+#ifndef NOMIRRORMEM
+          lda #0
+          tay
+          sta 0
+          sta pz
+          tax
+          inx
+          stx pz+1
+m1 
+#ifdef BATMEM
+          lda (pz),y
+          tax
+#endif       
+          lda pz+1
+          sta (pz),y
+          lda 0
+          bne me
+#ifdef BATMEM
+          txa
+          sta (pz),y
+#endif
+          inc pz+1
+          bpl m1         ; bis 32 kByte
+
+me        lda pz+1
+#else
+          lda #$80
+#endif
+          sta cnt
+          lda #1
+          sta pz+1
+mtlx      
+#ifdef BATMEM
+          lda (pz),y
+          tax
+#endif
+          lda #$55
+          sta (pz),y
+          cmp (pz),y
+          bne mtly
+          asl
+          sta (pz),y
+          cmp (pz),y
+          bne mtly
+#ifdef BATMEM
+          txa
+#else
+          lda #0
+#endif
+          sta (pz),y
+          cmp (pz),y
+          bne mtly
+          iny
+          bne mtlx
+          inc pz+1
+          lda pz+1
+          cmp cnt
+          bcc mtlx
+mtly      lda pz+1
+#else
+          lda #32
+#endif
+#ifndef NOMMU
+          cmp #32        ; 8 k
+#else
+          cmp #8         ; 2 k
+#endif
+          bcc mtl3e
+          lsr
+          lsr
+          lsr
+          lsr
+          sta cnt
+          jmp prgstart
+
+mtl1e     ldx #HE_ZP
+          .byt $2c
+mtl3e     ldx #HE_RAM
+          .byt $2c
+e1        ldx #HE_IMEM
+          .byt $2c
+e2        ldx #HE_IDEV
+          .byt $2c
+e3        ldx #HE_ISTR
+          .byt $2c
+e4        ldx #HE_IENV
+          .byt $2c
+erom      ldx #HE_ROM
+          .byt $2c
+edev      ldx #HE_DEV
+
+          jmp HERROR
+
++prgstart 
+#ifndef NOMMU
+          lda #SYSPAGE
+          sta MMU
+#endif
+          jsr getfreq
+          sta s1
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
+          lda #SYS_IRQEN+SYS_EXTIO
+#else
+          lda #SYS_EXTIO
+#endif
+          sta SYSPORT
+
+          jsr LEDOFF
+#endif
+#ifdef NOMMU
+#ifdef NMIDEV
+          jsr ininmi
+#endif
+#endif
+          jsr inimem
+          bcs e1
+          jsr inienv
+          bcs e4
+          lda s1
+          jsr inidev
+          bcs e2
+          jsr inistream 
+          bcs e3
+          jsr inisem
+          jsr fminit     
+
+xl        dec cnt
+          bmi x1
+          ldx cnt
+          cpx #SYSPAGE
+          beq xl
+          jsr ENMEM
+          jmp xl
+
+x1        lda #<PRGSTART
+          sta pz
+          lda #>PRGSTART
+          sta pz+1
+startloop ldy #0
+          lda (pz),y
+          iny
+          and (pz),y
+          cmp #$ff
+          bne slx1
+
+#ifdef ROMTEST
+          ldx MMU+8
+          jsr GETBLK
+          ldx MMU+9
+          jsr GETBLK
+          ldx MMU+$a
+          jsr GETBLK
+          ldx MMU+$b
+          jsr GETBLK
+          ldx MMU+$c
+          jsr GETBLK
+          ldx MMU+$d
+          jsr GETBLK
+          ldx MMU+$e
+          jsr GETBLK
+          ldx MMU+$f
+          jsr GETBLK
+#endif
+          jmp pstart
+xerr      jmp edev
+endloop   jmp erom
+
+slx1      ldy #P_KIND+2
+          lda (pz),y
+          bpl slx2
+          and #$7f
+          cmp #PK_PRG
+          beq iprg
+          cmp #PK_DEV
+          beq idev
+          cmp #PK_FS
+          beq ifs
+slx2      jmp inext
+
+idev      ldy #P_TAB+2
+          lda (pz),y
+          sta PCBUF+REGDEV_MPOS
+          iny
+          lda (pz),y
+          sta PCBUF+REGDEV_MBLK
+          ldy #P_ADR+2
+          lda (pz),y
+          sta PCBUF+REGDEV_ADR
+          iny
+          lda (pz),y
+          sta PCBUF+REGDEV_ADR+1
+          lda #DC_REGDEV
+          jsr DEVCMD
+          bcs xerr
+          jmp inext
+
+ifs       ldx #STDNUL
+          stx s1
+          stx s2
+          bne ifs1
+
+iprg      jsr GETSTR
+          bcs endloop
+          stx s1
+          jsr GETSTR
+endloopx  bcs endloop
+          stx s2
+          ldy #P_RES+2
+          lda (pz),y
+          tax
+          ldy s2
+          lda #DC_GS
+          jsr DEVCMD
+          ldy #P_RES+2
+          lda (pz),y
+          tax
+          ldy s1
+          lda #DC_PS
+          jsr DEVCMD
+          ldy #P_RES+2
+          lda (pz),y
+          pha
+          tax
+          lda #DC_RX_ON
+          jsr DEVCMD
+          pla
+          tax
+          lda #DC_TX_ON
+          jsr DEVCMD
+
+ifs1      lda s2
+          sta PCBUF+FORK_STDOUT
+          sta PCBUF+FORK_STDERR
+          lda s1
+          sta PCBUF+FORK_STDIN
+
+          ldy #P_MEM+2
+          lda (pz),y
+          tay
+          jsr GETENV
+          bcs endloopx
+          stx PCBUF+FORK_ENV
+#ifndef NOMMU
+          ldy #P_TAB+2
+sl1       sty cnt
+          lda (pz),y
+          bmi sle;beq sle             ; Erkennung Ende der Tabelle
+          tax
+          iny
+          lda (pz),y
+          pha
+          txa
+          tay
+          ldx PCBUF+FORK_ENV
+          pla
+          sec
+          jsr SETBLK
+          bcs sln
+          tax
+          jsr FREMEM
+sln       ldy cnt
+          iny
+          iny
+          bne sl1
+sle       iny  
+          ldx #FORK_NAME
+sl2       lda (pz),y
+          sta PCBUF,x
+          beq sl3
+          iny
+          inx
+          bne sl2
+sl3       inx
+          iny
+          lda (pz),y
+          sta PCBUF,x
+          bne sl3
+          inx
+          txa
+          pha
+#else
+          lda #0
+          sta PCBUF+FORK_NAME
+          sta PCBUF+FORK_NAME+1
+          lda #FORK_NAME+2
+          pha
+#endif
+          ldy #P_ADR+2
+          lda (pz),y
+          sta PCBUF+FORK_ADR
+          iny  
+          lda (pz),y
+          sta PCBUF+FORK_ADR+1
+
+          pla
+          tay
+          jsr FORK
+
+          ldx s1
+          lda #SC_NUL
+          jsr STRCMD
+          ldx s2
+          lda #SC_EOF
+          jsr STRCMD
+
+inext     ldy #0
+          lda (pz),y
+          tax
+          iny
+          lda (pz),y
+          sta pz+1
+          stx pz
+          jmp startloop
+
+#ifndef NOSYSPORT
++LEDOFF   lda SYSPORT
+          ora #SYS_LED
+          sta SYSPORT
+          rts
+#endif
+/*
++LEDON    lda SYSPORT
+          and #255-SYS_LED
+          sta SYSPORT
+          rts
+*/
++HERROR   .(        ; xr=Fehlernummer -1=1mal aus, -2=2mal aus etc
+#ifndef NOSYSPORT
+          LDA SYSPORT:ORA #SYS_LED
+          STA SYSPORT
+          LDY #0:TYA
+PRE2      ADC #1:BNE PRE2
+          INY:BNE PRE2
+          LDA SYSPORT:AND #$FF-SYS_LED
+          STA SYSPORT
+          LDA #0:TAY
+PRE3      ADC #1:BNE PRE3:INY
+          BNE PRE3:inx:BNE HERROR
+          ldx #15
+          lda #0:tay
+pre5      adc #1:bne pre5
+          iny:bne pre5
+          dex:bne pre5
+#endif
+          JMP RESET 
+          .)
+
+          .(
++pnmi
+#ifdef  NOMMU     
+#ifdef  NMIDEV
+          pha
+          tya
+          pha
+          txa
+          pha
+          cld
+
+          jsr x
+          jmp yendirq
+x         jmp (nmiadr)
+          
+nmiadr    =sysmem
+-sysmem   +=2
+
+&ininmi   lda #<zend
+          ldy #>zend
+n1        sta nmiadr
+          sty nmiadr+1
+          clc
+zend      rts
+
++setnmi   jsr memsys
+          bcc n2
+          jsr n1
+          bcc ne
+n2        jsr ininmi
+ne        jsr memtask
+          rts        
+#else
+          rti
++setnmi   lda #E_NOTIMP
+          sec
+          rts
+#endif
+#else
+          rti
++setnmi   lda #E_NOTIMP
+          sec
+          rts
+#endif
+          .)
+
+          .(
++pirq     pha
+          tya
+          pha
+          txa
+          pha
+          cld
+
+          tsx
+          lda $104,x
+          and #$10
+          beq pb1
+
+          jmp pbrk
+
+pb1   
+#ifndef NOMMU
+          lda MMU+1      ; System benutzt MMU+1/+2 z.B. fr read/write
+          pha            ; send/receive ....
+          lda MMU+2      ; muss bei interruptbaren Fkt erhalten bleiben
+          pha
+#endif
+          jsr memsys
+          
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
+          lda SYSPORT    ; Timer-IRQ merken
+          pha
+#endif
+#endif
+
+il        jsr irqdev
+
+#ifndef NOENVIRQ
+          jsr irqenv
+#endif
+
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
+          pla
+          ora SYSPORT    ; jetzt vielleicht Timer-IRQ ?
+          pha            ; merken
+          
+          lda SYSPORT
+          sta SYSPORT    ; Timer-IRQ l”schen
+
+          jsr testirq    ; immer noch IRQ
+          beq il         ; ja dann gleich wieder in Loop
+
+          pla
+          bpl endirq     ; kein Timer-IRQ -> kein Task-Wechsel
+#endif
+#endif
+
+          bit adev       
+          bpl endirq     ; Device Interupted -> kein Task-Wechsel
+          jmp irqloop
+
++endirq   jsr memtask
+&xendirq
+#ifndef NOMMU
+          pla
+          sta MMU+2
+          pla
+          sta MMU+1
+#endif
+&yendirq  pla
+          tax
+          pla
+          tay
+          pla
+          rti
+          .)
+
+          .(
+&getfreq  
+#ifndef NOSYSPORT
+
+#ifndef NOSINPORT
+          sei
+          lda #SYS_IRQEN
+          sta SYSPORT
+gf1       lda SYSPORT
+          bpl gf1
+          sta SYSPORT
+          bit SYSPORT
+          bmi gf1
+          lda #0
+          tay
+          tax
+gf2       bit SYSPORT
+          bmi gfe
+          clc
+          adc #1
+          bne gf2
+          inx
+          bne gf2
+          iny
+          bne gf2
+gfe       cpx #8    ; mehr dann 2 MHZ
+          bcc gf3
+          lda #128
+          rts
+gf3       lda #0
+          rts
+#else               /* ifndef NOSINPORT */
+#ifdef CLK2MHZ
+          lda #128
+#else
+          lda #0
+#endif
+          rts
+#endif              /* NOSINPORT        */
+
+#else               /* ifndef NOSYSPORT */
+#ifdef CLK2MHZ
+          lda #128
+#else
+          lda #0
+#endif
+          rts
+#endif              /* NOSYSPORT        */
+          .)
+          
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
++testirq  .(
+          lda SYSPORT
+          and #SYS_IRQ
+          rts
+          .)
+#endif
+#endif
+          .)
+

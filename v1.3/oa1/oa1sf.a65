@@ -1,0 +1,79 @@
+
+          .(
+
+#ifndef NOMMU
+anzfs     =syszp
+-syszp    +=1
+#else
+anzfs     =sysmem
+-sysmem   +=1
+#endif
+   
+fstab     =sysmem
+fstask    =sysmem+MAXFS+1
+-sysmem   +=2*(MAXFS+1)
+
++fminit   lda #0
+          sta anzfs
+          sta fstab
+          clc
+          rts
+
++fm       cmp #FM_REG
+          bne fm1
+          lda anzfs
+          cmp #MAXFS
+          bcs fme1
+#ifndef NOMMU
+          lda BLKSIZ+PCBUF+FM_REG_DRVS
+#else
+          lda PCBUF+FM_REG_DRVS
+#endif
+          ldy anzfs
+          clc
+          adc fstab,y
+          sta fstab+1,y
+          inc anzfs
+#ifndef NOMMU
+          lda BLKSIZ+PCBUF+FM_REG_ENV
+#else
+          lda PCBUF+FM_REG_ENV
+#endif
+          sta fstask,y
+          lda #E_OK
+          .byt $2c
+fme1      lda #E_NOMEM
+          .byt $2c
+fme2      lda #E_NODEV
+          sec
+          rts
+
+fm1
+#ifndef NOMMU
+          lda BLKSIZ+PCBUF+FM_OPEN_DRV
+#else
+          lda PCBUF+FM_OPEN_DRV
+#endif
+          ldy #0
+fm2       cpy anzfs
+          bcs fme2
+          cmp fstab+1,y
+          bcc fmok
+          iny
+          bne fm2
+
+fmok      sec
+          sbc fstab,y
+#ifndef NOMMU
+          sta BLKSIZ+PCBUF+FM_OPEN_DRV
+#else
+          sta PCBUF+FM_OPEN_DRV
+#endif
+          lda fstask,y
+          tax
+          clc
+          rts
+          .)
+
+          
+          

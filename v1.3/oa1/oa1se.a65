@@ -1,0 +1,1634 @@
+
+/*        Struct Task Environment Entry          */
+
+#ifndef NOMMU
+/*************************** Envtab ******************/
+#define   TE_MMU    0
+#define   TE_MMU_L  15   /* Anzahl EintrÑge in MMU-Liste    */
+#define   TE_ST     15
+/*************************** Env2tab *****************/
+#define   TE_PAR    0    /*16*/   /* 3 Byte      */
+#define   TE_IRQ    3    /*19*/   /* IRQ-Adr     */
+#define   TE_STDIN  5    /*21*/
+#define   TE_STDOUT 6    /*22*/
+#define   TE_STDERR 7    /*23*/
+#define   TE_NAME   8 
+
+#define   TE_SLEN   16   /*24*/
+#else
+#define   TE_ST     0
+#define   TE_SP     1
+#define   TE_PAR    2    /* 3 Byte      */
+#define   TE_IRQ    5    /* IRQ-Adr     */
+#define   TE_STDIN  7
+#define   TE_STDOUT 8
+#define   TE_STDERR 9
+#define   TE_SLEN   10
+#endif
+
+          .(
+
+#ifndef NOMMU
+Task      =syszp
+Irqcnt    =syszp+1
++Syscnt   =syszp+2
+p0        =syszp+3
+p1        =syszp+4
+yr        =syszp+5
+-syszp    +=6
+#else
+Task      =sysmem
+Irqcnt    =sysmem+1
++Syscnt   =sysmem+2
+p0        =sysmem+3
+p1        =sysmem+4
+yr        =sysmem+5
+-sysmem   +=6
+#endif
+
+Envtab    =sysmem
+-sysmem   +=ANZENV*TE_SLEN
+
+#ifndef NOMMU
+Env2tab   =sysmem
+-sysmem   +=ANZENV*TE_SLEN
+#else
+Env2tab   =Envtab
+#endif
+
+Xenv      =sysmem
+-sysmem   +=ANZXENV
+
+          .(
++inienv   ldx #0
+          stx Task
+          lda #TS_FRE
+i1        jsr setyenv
+          sta Envtab+TE_ST,y
+          inx
+          cpx #ANZENV
+          bcc i1
+
+          lda #<-1
+          ldx #0
+i2        sta Xenv,x
+          inx
+          cpx #ANZXENV
+          bcc i2
+          
+          ldx #1
+          stx Syscnt          ; memtask wird zuerst vom System aufgerufen
+          clc
+          rts
+          .)
+
+          .(
+div       =syszp
+-syszp    +=1
+
+&setyenv  php       ; x=Task-Nr -> y=Index in Envtab
+          pha       ; a bleibt erhalten
+          sei
+          txa
+          asl
+#ifndef NOMMU       /* TE_SLEN =16 */
+          asl
+          asl
+          asl
+#else               /* TE_SLEN =10 */
+          sta div
+          asl
+          asl
+          clc 
+          adc div
+#endif
+          tay
+          pla
+          plp
+          rts
+          .)
+
+          .(
+
+/*        Start: Syscnt =1, dann memtask     */
+
+#ifndef NOMMU
+
+AC        =syszp
+XR        =syszp+1
+YR        =syszp+2
+SR        =syszp+3
+ADR       =syszp+4
+mmu       =syszp+6
+
+-syszp   +=7
+
++memtask  php
+          sei
+          dec Syscnt     ; wieder in Task 
+          bne mtask      ; nein dann Ende
+
+          sty YR         ; sonst Env/Block setzen
+          stx XR
+          sta AC
+          pla
+          sta SR
+          pla  
+          sta ADR
+          pla
+          sta ADR+1
+          tsx
+          stx $1FF
+
+          lda adev       ; RÅcksprung in Device
+          bmi mt1        ; nein dann Task-Env setzen
+          asl
+          asl
+          tax
+          lda DEVTAB+DVT_POS,x
+          tay
+          lda DEVTAB+DVT_BLK,x
+          sta mmu
+          sta MMU,y
+          jmp mt2
+          
+mt1       ldx Task
+          jsr setyenv
+          sty p0
+
+          ldx #2
+tm1       lda Envtab+TE_MMU+2,y
+          sta MMU,x
+          iny
+          inx
+          cpx #TE_MMU_L
+          bcc tm1
+
+          ldy p0
+          lda Envtab+TE_MMU+1,y
+          sta mmu
+          lda Envtab+TE_MMU,y
+          sta MMU
+          
+mt2       ldx $1ff
+          txs
+
+          lda #SYSPAGE
+          sta MMU+1
+
+          ;ldx $1FF
+          ;txs
+          lda BLKSIZ+ADR+1
+          pha
+          lda BLKSIZ+ADR
+          pha
+          lda BLKSIZ+SR
+          pha
+          lda BLKSIZ+AC
+          pha
+          lda BLKSIZ+mmu
+          ldy BLKSIZ+YR
+          ldx BLKSIZ+XR
+          sta MMU+1
+          pla
+mtask     plp
+          rts
+
++memsys   php
+          sei
+          pha
+          lda #SYSPAGE
+          sta MMU+1
+          lda BLKSIZ+Syscnt
+          inc BLKSIZ+Syscnt
+          cmp #0
+          beq msys
+          pla
+          plp
+          rts
+msys      pla
+          sta BLKSIZ+AC
+          pla
+          sta BLKSIZ+SR
+          stx BLKSIZ+XR
+          sty BLKSIZ+YR
+          pla
+          tay
+          pla
+          tsx
+          stx $1FF
+          ldx #SYSPAGE
+          stx MMU
+          ldx $1FF
+          txs
+          pha
+          tya
+          pha
+          lda SR
+          pha
+          lda AC
+          ldx XR
+          ldy YR
+          plp
+          cld
+          rts
+
+#else
+
+AC        =sysmem
+XR        =sysmem+1
+YR        =sysmem+2
+SR        =sysmem+3
+ADR       =sysmem+4
+SSP       =sysmem+6
+
+-sysmem   +=7
+
++memtask  php
+          sei
+          dec Syscnt     ; wieder in Task 
+          bne mtask      ; nein dann Ende
+
+          bit adev       ; RÅcksprung in Device
+          bpl mtask      ; ja dann Ende
+          
+          sty YR         ; sonst Task-Env setzen
+          stx XR
+          sta AC
+          pla
+          sta SR
+          pla  
+          sta ADR
+          pla
+          tsx
+          stx SSP
+
+          ldx Task
+          jsr setyenv         ; a bleibt erhalten
+          sty p0
+          ldx Envtab+TE_SP,y 
+
+          txs
+          pha
+          lda ADR
+          pha
+          lda SR
+          pha
+          lda AC
+          ldy YR
+          ldx XR
+mtask     plp
+          rts
+
++memsys   php
+          sei
+          pha
+          lda Syscnt
+          inc Syscnt
+          cmp #0
+          bne mse
+          bit adev       ; von Device aufgerufen
+          bmi msys       ; nein, dann Stack retten
+mse       pla
+          plp
+          rts
+
+msys      pla
+          sta AC
+          pla
+          sta SR
+          stx XR
+          sty YR
+          pla
+          sta ADR
+          pla
+          sta ADR+1
+          tsx
+ms3       ldy p0
+          txa
+          sta Envtab+TE_SP,y
+ms2       ldx SSP
+          txs
+          lda ADR+1
+          pha
+          lda ADR
+          pha
+          lda SR
+          pha
+          lda AC
+          ldx XR
+          ldy YR
+          plp
+          cld
+          rts
+#endif
+          .)
+
+          .(
+
+&nexttask .(
+
+#ifndef NOMMU
+tcnt      =syszp
+-syszp    +=1
+#else
+tcnt      =sysmem
+-sysmem   +=1
+#endif
+
+          ldx Task
+          inx
+          cpx #ANZENV
+          bcc startx
++pstart   ldx #0
+startx    cld
+          cli
+          lda #IRQCNT
+          sta Irqcnt
+          stx tcnt
+          
+psl       stx Task
+          jsr setyenv
+          sty p0
+
+          lda Envtab+TE_ST,y
+
+          cmp #TS_RDY         ; Task ready
+          beq s1              ; dann starten
+          
+          cmp #TS_IRQ         ; Task Interrupted
+          beq s2              ; dann starten
+
+          cmp #TS_WFSEM       ; Semaphore 
+          bne s3x
+          jsr s3              ; test&set
+          bcc s1              ; ok dann starten wie RDY
+          bcs psx             ; sonst weiter
+
+s3x       cmp #TS_SIG         ; Task wartet auf Signal
+          bne s3x1
+          lda #<-1
+          sta tcnt            ; verhindert RESET, falls alle nur auf Sigs warten
+          
+s3x1      cmp #TS_WXTX
+          bne s3x2
+          sec
+          bcs s3x2a
+          
+s3x2      cmp #TS_WFTX        ; Warten auf SEND
+          bne psx
+          clc
+s3x2a     jsr testtx          ; testen 
+          bcc startx          ; ok dann Task starten
+
+psx       inx                 ; nÑchsten Task testen
+          cpx #ANZENV
+          bcc ps1
+          ldx #0
+
+ps1       cpx tcnt            ; Test auf den Task, mit dem in Schleife
+          bne psl             ; gesprungen wurde
+          
+          ldx #HE_TASK        ; alle Tasks inaktiv, d.h. keiner aktiv und
+          jmp HERROR          ; keiner wartet auf Signals 
+          .)
+          
+          .(
+&s1       lda Env2tab+TE_PAR+2,y
+          pha
+          lda Env2tab+TE_PAR,y
+          tax
+          lda Env2tab+TE_PAR+1,y
+          tay
+          pla
+          jsr memtask
+          clc
+          cli             
+          rts
+          .)
+
+          .(
++irqloop  lda Syscnt
+          cmp #1
+          bne s2
+          
+          ldx Task
+          jsr setyenv
+          lda #TS_IRQ
+          sta Envtab+TE_ST,y
+          dec Irqcnt
+          beq nt2
+&s2       jmp endirq
+nt2       jmp nexttask
+          .)
+
+          .(
+&s3       lda Env2tab+TE_PAR,y
+          tax
+          jsr tstnset
+          ldx Task
+          rts
+          .)
+
+&testtx   .(
+
+#ifndef NOMMU
+cnt       =syszp
+PAR       =syszp+1
+py        =syszp+4
+-syszp    +=5
+#else
+cnt       =sysmem
+PAR       =sysmem+1
+py        =sysmem+4
+-sysmem   +=5
+#endif
+
+          stx cnt        ; der Task, der RX ausgefÅhrt hat
+          ldy p0
+          bcc s4b
+
+          lda Env2tab+TE_PAR,y
+          tax
+          jsr tsttask
+          beq s4ok
+          bne s44e
+                    
+s4a       jsr tsttask
+          beq s4ok
+s4b       inx
+          cpx #ANZENV
+          bcc s4c
+          ldx #0
+s4c       cpx cnt
+          bne s4a
+s44e      ldx cnt
+          lda #E_NOTX
+          sec
+          rts
+
+tsttask   jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_WFRX
+          bne s44x
+          lda Env2tab+TE_PAR,y
+          cmp cnt
+s44x      rts
+
+s4ok      stx PAR                  ; der Task, der TX ausgefÅhrt hat
+          lda Env2tab+TE_PAR+1,y    ; Anzahl Byte
+          sta PAR+1
+#ifndef NOMMU
+          tax
+          lda Envtab+TE_MMU,y
+          sta MMU+2
+#endif
+          lda Env2tab+TE_PAR+2,y    ; CMD (AC)
+          sta PAR+2
+          sty py                   ; der, der TX ausgefÅhrt hat
+          ldy p0                   ; der, der RX ausgefÅhrt hat
+#ifndef NOMMU
+          lda Envtab+TE_MMU,y
+          sta MMU+1
+s4d       dex
+          lda 2*BLKSIZ+PCBUF,x
+          sta BLKSIZ+PCBUF,x
+          cpx #0
+          bne s4d
+#endif
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          ldx #0
+s4xx      lda PAR,x
+          sta Env2tab+TE_PAR,y
+          iny
+          inx
+          cpx #3
+          bcc s4xx
+          lda #TS_RDY  
+          ldy py
+          sta Envtab+TE_ST,y
+          ldx cnt
+          lda #E_OK
+          clc
+          rts    
+          .)
+
+          .)
+
+          .(
+
+#ifndef NOMMU
+mem       =syszp
+div       =syszp+1
+cnt       =syszp+2
+anz       =syszp+3
+-syszp    +=4
+#else
+div       =sysmem
+-sysmem   +=1
+#endif
+
++getenv   jsr memsys
+#ifndef NOMMU
+          tya
+          clc
+          adc #3
+          lsr
+          lsr
+          sta mem   ; anzahl 4k-Blocks
+#endif
+          ldx #0
+i2        jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_FRE
+          beq ifre
+          inx
+          cpx #ANZENV
+          bcc i2
+          bcs noenv
+ifre      
+#ifndef NOMMU
+          stx div
+          sty cnt
+          lda #0
+          sta anz
+l1        dec mem
+          bmi l1a
+          jsr GETMEM
+          bcs endenv
+          txa
+          ldy cnt
+          sta Envtab+TE_MMU,y
+          inc anz
+          inc cnt
+          bne l1
+
+l1a       ldx anz
+          lda #15   ; ROM
+l3        iny
+          cpx #TE_MMU_L
+          bcs l2
+          sta Envtab+TE_MMU,y
+          inx
+          bne l3
+l2        
+          lda #TS_ENV
+          sta Envtab+TE_ST-TE_MMU_L,y
+          lda #$ff
+          sta Env2tab+TE_IRQ-TE_MMU_L,y
+          sta Env2tab+TE_IRQ+1-TE_MMU_L,y
+          ldx div   
+          jmp ok
+endenv    
+          ldy anz
+          dey
+          bmi e1
+          ldy cnt
+          lda Envtab+TE_MMU,y
+          tax
+          jsr FREMEM
+          dec cnt
+          dec anz
+          jmp endenv
+e1        lda #E_NOMEM
+          .byt $2c
+#else
+          lda #TS_ENV
+          sta Envtab+TE_ST,y
+          lda #$ff
+          sta Env2tab+TE_IRQ,y
+          sta Env2tab+TE_IRQ+1,y
+          jmp ok
+#endif
+
+&ok       lda #E_OK
+          .byt $2c
+noenv     lda #E_NOENV
+          jsr memtask
+          cmp #1
+          rts
+          
++freenv   jsr memsys
+          jsr testenv
+          bcs noenv
+          jsr setyenv
+#ifndef NOMMU
+          sty cnt
+#endif
+          lda Envtab+TE_ST,y
+          cmp #TS_FRE
+          beq endf
+          cmp #TS_RDY
+          bcs noenv
+#ifndef NOMMU
+          lda #TE_MMU_L
+          sta anz
+f1        ldy cnt
+          lda Envtab+TE_MMU,y
+          beq f2
+          tax
+          jsr FREMEM
+f2        inc cnt
+          dec anz
+          bne f1
+          ldy cnt
+endf      lda #TS_FRE
+          sta Envtab+TE_ST-TE_MMU_L,y
+          jmp ok
+#else
+endf      lda #TS_FRE
+          sta Envtab+TE_ST,y
+          jmp ok
+#endif
+
++term     ldx #OWNTASK
++kill     jsr memsys
+          jsr testenv
+          bcs noenv
+          pha
+          stx div
+
+          ldx #0
+t1        jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_WTERM
+          bne t2
+          lda Env2tab+TE_PAR,y
+          cmp div
+          bne t2
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          pla
+          pha
+          sta Env2tab+TE_PAR+2,y    ; -> ac=return-code
+t2        inx
+          cpx #ANZENV
+          bcc t1
+          pla
+
+          ldx div
+          jsr setyenv
+          sty p1
+
+          lda #TS_ENV
+          sta Envtab+TE_ST,y
+
+          ldx Env2tab+TE_STDIN,y
+          lda #SC_NUL
+          jsr STRCMD
+
+          ldy p1
+          ldx Env2tab+TE_STDOUT,y
+          lda #SC_EOF
+          jsr STRCMD
+
+          ldy p1
+          ldx Env2tab+TE_STDERR,y
+          lda #SC_EOF
+          jsr STRCMD
+
+          ldx div
+          jsr FREENV
+
+          lda div
+          cmp Task
+          beq nt
+          jmp ok
+nt        jmp nexttask
+          .)
+
+          .(
+#ifndef NOMMU
+ssx       =syszp
+ssy       =syszp+1
+ssa       =syszp+2
+-syszp    +=3
+#else
+ssx       =sysmem
+ssy       =sysmem+1
+ssa       =sysmem+2
+-sysmem   +=3
+#endif
+
+sendsig   php            ; 'sei' muû, da auch von Device aufrufbar
+          sei
+          stx ssx
+          sty ssy
+          sta ssa
+          ldx #0
+ssl       jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_SIG
+          bne ssn
+          lda ssa
+          cmp Env2tab+TE_PAR+2,y
+          bne ssn
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          lda adev
+          bpl ssd
+          lda Task
+          .byt $2c
+ssd       lda #<-1
+          sta Env2tab+TE_PAR+2,y
+          lda ssx
+          sta Env2tab+TE_PAR,y
+          lda ssy
+          sta Env2tab+TE_PAR+1,y
+ssn       inx
+          cpx #ANZENV
+          bcc ssl
+          plp
+          jmp ok
+          
++signal   jsr memsys
+          bcs sendsig
+          ldy p0
+          sta Env2tab+TE_PAR+2,y
+          txa
+          ldx #TS_SIG
+          bne sus1
+
++suspend  jsr memsys
+          sty yr
+          ldy p0
+          sta Env2tab+TE_PAR+2,y
+          txa
+          ldx #TS_RDY
+sus1      sta Env2tab+TE_PAR,y
+          lda yr
+          sta Env2tab+TE_PAR+1,y
+          txa
+          sta Envtab+TE_ST,y
+          jmp nexttask
+          .)
+
+          .(
++psem     bcc ps1
+          jmp tstnset
+ps1
+          jsr memsys
+          ldy p0
+          txa
+          sta Env2tab+TE_PAR,y      ; Semaphor-Nummer
+          lda #TS_WFSEM
+          sta Envtab+TE_ST,y
+          jmp nexttask
+          .)
+
+          .(
++wterm    jsr memsys
+          jsr testenv
+          bcs noenv
+          jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_RDY
+          bcc noenv
+          ldy p0
+          txa
+          sta Env2tab+TE_PAR,y      ; Nummer des Tasks
+          lda #TS_WTERM
+          sta Envtab+TE_ST,y
+          jmp nexttask
+noenv     lda #E_NOENV
+          sec
+          jsr memtask
+          rts
+          .)
+/*
+#ifndef NOMMU
+setanam   .(
+          asl
+          asl
+          asl
+          asl
+          rts
+          .)
+#endif
+*/
+          .(
++send     jsr memsys
+          cpx #SEND_SYS
+          beq syspc
+          sty yr
+          ldy p0
+          sta Env2tab+TE_PAR+2,y    ; command
+          cpx #SEND_FM
+          bne send1
+
+#ifndef NOMMU
+          ldx Envtab+TE_MMU,y      
+          stx MMU+1
+#endif
+          jsr fm                   ; braucht a=command fÅr FM_REG
+          bcs f1
+
+send1     jsr testenv
+          bcs serr
+          cpx Task
+          beq serr
+          ldy p0
+          txa
+          sta Env2tab+TE_PAR,y      ; Zieltask
+          lda yr
+          sta Env2tab+TE_PAR+1,y    ; Anzahl Byte
+          lda #TS_WFRX
+          sta Envtab+TE_ST,y
+          jmp nexttask
+
+serr      lda #E_NOENV
+f1        jsr memtask
+          cmp #1                   ; compare weil FM_REG mit E_OK und c=1
+          rts                      ; rausspringt
+          
++fork     lda #SP_FORK
+          beq sends
++setirq   lda #SP_SETIRQ
+          ldy #SETIRQ_SLEN
+          bne sends
++treset   lda #SP_RESET
+          ldy #RESET_SLEN
+sends     jsr memsys
+
+syspc     pha
+          tya
+          tax
+#ifndef NOMMU
+          jsr cptasksys
+#endif
+          pla
+          jsr isyspc
+          jsr memtask
+          cmp #1
+          rts
+          .)
+
+#ifndef NOMMU
+
+&&cptasksys
+          .(
+          ldy p0
+          lda Syscnt
+          cmp #1
+          bne r1
+          lda Envtab+TE_MMU,y
+          .byt $2c
+r1        lda #SYSPAGE
+          sta MMU+1
+          rts
+          .)
+#endif
+
+          .(
++xreceive jsr memsys
+          bcc rx1a
+          lda #TS_WXTX
+          bne rx1b
+          
++receive  jsr memsys
+          bcc rx1
+          lda #TS_WFTX
+rx1b      ldy p0
+          sta Envtab+TE_ST,y
+rx2       jmp nexttask
+
+rx1a      sec
+rx1       ldx Task
+          jsr testtx
+          bcc rx2
+          jsr memtask
+          rts
+          .)
+
+          .(
+#ifdef NOMMU
+xSYSBUF   =PCBUF
+#else
+xSYSBUF   =BLKSIZ+PCBUF
+#endif
+          
+&isetirq  
+#ifdef NOENVIRQ
+          lda #E_CONFIG
+          rts
+#else
+          ldx xSYSBUF+SETIRQ_ENV
+          jsr testenv
+          bcs iresx
+          jsr setyenv
+          lda xSYSBUF+SETIRQ_ADR
+          clc
+          adc #$ff
+          sta Env2tab+TE_IRQ,y
+          lda xSYSBUF+SETIRQ_ADR+1
+          adc #$ff
+          sta Env2tab+TE_IRQ+1,y
+          lda #E_OK
+          rts
+#endif
+
+#ifdef NOMMU
+xtask     =sysmem
+-sysmem   +=1
+#endif
+
+&ireset   
+          ldx xSYSBUF+RESET_ENV
+          jsr testenv
+          bcs iresx
+#ifdef NOMMU
+          stx xtask
+#endif
+          jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_ENV+1
+          bcc iresx
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          lda #$ff
+          sta Env2tab+TE_IRQ,y
+          sta Env2tab+TE_IRQ+1,y
+          lda xSYSBUF+RESET_ADR
+          ldx xSYSBUF+RESET_ADR+1
+          jmp setsp
+iresx     lda #E_NOENV
+          rts
+
+
++ifork    ldx xSYSBUF+FORK_STDIN
+          jsr teststd
+          stx xSYSBUF+FORK_STDIN
+          ldx xSYSBUF+FORK_STDOUT
+          jsr teststd
+          stx xSYSBUF+FORK_STDOUT
+          ldx xSYSBUF+FORK_STDERR
+          jsr teststd
+          stx xSYSBUF+FORK_STDERR
+
+          ldx xSYSBUF+FORK_ENV
+          jsr testenv
+          bcs iresx
+#ifdef NOMMU
+          stx xtask
+#endif
+          jsr setyenv
+
+          sty p1
+          lda Envtab+TE_ST,y
+          cmp #TS_ENV
+          bne iresx
+
+          lda xSYSBUF+FORK_ENV      ; start x=eigenes Env
+          sta Env2tab+TE_PAR,y
+
+          lda xSYSBUF+FORK_STDIN
+          sta Env2tab+TE_STDIN,y
+          tax
+          lda #SC_REG_RD
+          jsr STRCMD
+
+          ldy p1
+          lda xSYSBUF+FORK_STDOUT
+          sta Env2tab+TE_STDOUT,y
+          tax
+          lda #SC_REG_WR
+          jsr STRCMD
+
+          ldy p1
+          lda xSYSBUF+FORK_STDERR
+          sta Env2tab+TE_STDERR,y
+          tax
+          lda #SC_REG_WR
+          jsr STRCMD
+#ifndef NOMMU
+          ldy p1
+          ldx #0
+n1        lda xSYSBUF+FORK_NAME,x
+          sta Env2tab+TE_NAME,y
+          beq n2
+          iny
+          inx
+          cpx #8
+          bcc n1
+n1a       lda xSYSBUF+FORK_NAME,x
+          beq n2
+          inx
+          bne n1a
+n2        inx
+          ldy p1
+          lda Envtab+TE_MMU,y
+          sta MMU+2
+          ldy #0
+n3        lda xSYSBUF+FORK_NAME,x
+          sta BLKSIZ*2+PCBUF,y
+          beq n4
+          iny
+          inx
+          bne n3
+n4
+#endif
+          lda xSYSBUF+FORK_ADR
+          ldx xSYSBUF+FORK_ADR+1
+          ldy p1
+
+setsp 
+#ifndef NOMMU
+          pha
+          lda Envtab+TE_MMU,y 
+          sta MMU+1
+          pla
+          sec
+          sbc #1
+          sta BLKSIZ+$1fd
+          txa
+          sbc #0
+          sta BLKSIZ+$1fe
+
+          lda #$fc
+          sta BLKSIZ+$1ff     ;Envtab+TE_SP,y  
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          lda #E_OK
+          sec
+          rts
+#else
+          pha
+          sty p1
+          lda xtask
+          clc
+          adc #1
+          asl       ; *32     = 8 Envs, davon 6+7 fÅr system
+          asl
+          asl
+          asl
+          asl
+          sec
+          sbc #3
+          sta Envtab+TE_SP,y
+          tay 
+          pla
+          sec
+          sbc #1
+          sta $101,y
+          txa
+          sbc #0
+          sta $102,y
+          
+          ldy p1
+          lda #TS_RDY
+          sta Envtab+TE_ST,y
+          
+          lda #E_OK
+          clc
+          rts
+#endif
+          .)
+
+#ifndef NOENVIRQ
+          .(
++irqenv   lda Task
+          pha
+          lda Syscnt
+          pha
+          lda adev
+          pha
+          lda p0
+          pha
+          lda #<-1
+          sta adev
+          lda #1
+          sta Syscnt
+          ldx #0
+ie0       stx Task
+#ifndef NOSYSPORT
+#ifndef NOSINPORT
+          jsr testirq
+          bne eirq
+#endif
+#endif
+          jsr setyenv
+          lda Envtab+TE_ST,y
+          cmp #TS_BRK+1
+          bcc ie1
+          lda Env2tab+TE_IRQ,y
+          cmp #$ff
+          bne ie0x
+          cmp Env2tab+TE_IRQ+1,y
+          beq ie1
+ie0x      ldx Env2tab+TE_IRQ+1,y 
+          tay
+          jsr memtask
+          lda #>rtirq-1
+          pha
+          lda #<rtirq-1
+          pha
+          txa
+          pha
+          tya
+          pha
+          rts          
+rtirq     jsr memsys     
+          ldx Task
+ie1       inx
+          cpx #ANZENV
+          bcc ie0
+
+eirq      pla
+          sta p0
+          pla
+          sta adev
+          pla
+          sta Syscnt
+          pla
+          sta Task
+          rts
+          .)
+#endif
+          .(
+#ifndef NOMMU
+
+wrp       =syszp
+byte      =syszp+2
+env       =syszp+3
+him       =syszp+4
+
+-syszp    +=5
+
++read     clc
+          .byt $24
++write    sec
+          jsr memsys
+
+          php
+          sta byte
+          sty env
+
+          ldy p0
+
+          lda Envtab+TE_MMU,y
+          sta MMU+1
+          
+          lda BLKSIZ,x
+          sta wrp
+          lda BLKSIZ+1,x
+          tay
+          and #$0f
+          ora #$10
+          sta wrp+1
+          tya
+          lsr
+          lsr
+          lsr
+          lsr
+          sta him
+          cmp #TE_MMU_L
+          bcs wnoenv
+
+          ldx env
+          jsr testenv
+          bcs wnoenv
+          
+          jsr setyenv
+
+          ldx Envtab+TE_ST,y
+          cpx #TS_RDY
+          bcs wnoenv
+
+          tya
+          adc him
+          tay
+          
+          lda Envtab+TE_MMU,y
+          sta MMU+1
+
+          ldy #0
+          
+          plp
+          bcc rd
+          lda byte
+          sta (wrp),y
+rd        lda (wrp),y
+          clc
+          jsr memtask    
+          rts
+wnoenv    pla
+          lda #E_NOENV        
+          jsr memtask
+          cmp #1
+          rts
+#else
+
++read     clc
+          .byt $24
++write    sec
+          jsr memsys
+
+          php
+          plp
+          bcc rd
+          sta (0,x)
+rd        lda (0,x)
+          clc
+          jsr memtask    
+          rts
+#endif
+          .)
+
+          .(
++isyspc   asl
+          tax
+          lda pctab+1,x
+          pha
+          lda pctab,x
+          pha
+          rts
+
+pctab     .word ifork-1,isetirq-1,ireset-1
+          .)
+
++getinfo  .(
+
+#ifndef NOMMU
+cnt       =syszp
+cnt2      =syszp+1
+xr        =syszp+2
+-syszp    +=3
+xSYSBUF   =BLKSIZ+PCBUF
+#else
+cnt       =sysmem
+-sysmem   +=1
+xSYSBUF   =PCBUF
+#endif
+
+          jsr memsys
+#ifndef NOMMU
+          jsr cptasksys
+#endif
+          ldx #0
+g1        stx cnt
+          jsr setyenv
+          txa
+          asl
+          asl
+          asl
+          asl
+          tax
+          lda Envtab+TE_ST,y
+          sta xSYSBUF+TN_ST,x
+#ifndef NOMMU
+          lda Envtab+TE_MMU,y
+          sta MMU+2
+          lda BLKSIZ*2+$1ff
+#else
+          lda Envtab+TE_SP,y
+#endif
+          sta xSYSBUF+TN_SP,x
+          lda Env2tab+TE_IRQ,y
+          sta xSYSBUF+TN_IRQ,x
+          lda Env2tab+TE_IRQ+1,y
+          sta xSYSBUF+TN_IRQ+1,x
+          lda Env2tab+TE_STDIN,y
+          sta xSYSBUF+TN_STDIN,x
+          lda Env2tab+TE_STDOUT,y
+          sta xSYSBUF+TN_STDOUT,x
+          lda Env2tab+TE_STDERR,y
+          sta xSYSBUF+TN_STDERR,x
+#ifndef NOMMU
+          tya
+          pha
+          stx xr
+          ldx #0
+          stx cnt2
+g2        lda Envtab+TE_MMU,y
+          cmp #$0f
+          beq g3
+          lda cnt2
+          clc
+          adc #4
+          sta cnt2
+g3        iny
+          inx
+          cpx #TE_MMU_L
+          bcc g2
+          pla
+          tay
+          lda cnt2
+          ldx xr
+#else
+          lda #4
+#endif
+          sta xSYSBUF+TN_MEM,x
+#ifdef NOMMU
+          lda #0
+          sta xSYSBUF+TN_NAME,x
+#else
+          lda #8
+          sta cnt2
+g4        lda Env2tab+TE_NAME,y
+          sta xSYSBUF+TN_NAME,x
+          iny
+          inx
+          dec cnt2
+          bne g4
+#endif
+          ldx cnt
+          inx
+          cpx #ANZENV
+          bcc g1
+/*
+#ifndef NOMMU
+#if TN_SLEN*ANZENV<256
+          ldx #TN_SLEN*ANZENV
+#else
+          ldx #255
+#endif
+          jsr CPSYSTASK
+#endif
+*/
+          lda #E_OK
+          clc
+          jsr memtask
+          rts
+          .)
+
+          .(
+#ifndef NOMMU
+SEMFRE    =syszp
+div       =syszp+(ANZSEM+7)/8
+-syszp    +=((ANZSEM+7)/8)+1
+#else
+SEMFRE    =sysmem
+div       =sysmem+(ANZSEM+7)/8
+-sysmem   +=((ANZSEM+7)/8)+1
+#endif
+
++inifsem  lda #$ff
+          ldy #(ANZSEM+7)/8-1
+if1       sta SEMFRE,y
+          dey
+          bpl if1
+          clc
+          rts
+
++getsem   jsr memsys
+          ldx #0
+l2        lda SEMFRE,x
+          beq gnext
+          ldy #0
+l3        lsr
+          bcs found
+          iny
+          cpy #8
+          bcc l3
+found     lda POT2,y
+          eor #<-1
+          and SEMFRE,x
+          sta SEMFRE,x
+          txa
+          asl
+          asl
+          asl
+          sta div
+          tya
+          clc
+          adc div
+          tax
+          lda #E_OK
+gne       jsr memtask
+          cmp #1
+          rts
+gnext     inx
+          cpx #(ANZSEM+7)/8
+          bcc l2
+          lda #E_NOSEM
+          bcs gne
+
++gsetxy   txa
+asetxy    and #7
+          tay
+          txa
+          lsr
+          lsr
+          lsr
+          tax
+          lda POT2,y
+          rts
+          
++fresem   jsr memsys
+          cpx #ANZSEM
+          bcs illpar
+          jsr gsetxy
+          ora SEMFRE,x
+          sta SEMFRE,x
+          lda #E_OK
+          .byt $2c
+illpar    lda #E_NOSEM
+          jsr memtask
+          cmp #1
+          rts
+
+#ifndef NOMMU
+SEMVAL    =syszp
+-syszp    +=(ANZSEM+SYSSEM+7)/8
+#else
+SEMVAL    =sysmem
+-sysmem   +=(ANZSEM+SYSSEM+7)/8
+#endif
+
++inisem   ldy #(ANZSEM+SYSSEM+7)/8-1
+          lda #0
+i1        sta SEMVAL,y
+          dey
+          bpl i1
+          jmp inifsem
+
++tstnset  jsr memsys
+          txa
+          clc
+          adc #SYSSEM
+          cmp #ANZSEM+SYSSEM
+          bcs illpar
+          jsr asetxy
+          and SEMVAL,x
+          bne set
+          lda POT2,y
+          ora SEMVAL,x
+          sta SEMVAL,x
+          lda #E_OK
+          .byt $2c
+set       lda #E_SEMSET
+          jsr memtask
+          cmp #1
+          rts
+
++clrsem   jsr memsys
+          txa
+          clc
+          adc #SYSSEM
+          cmp #ANZSEM+SYSSEM
+          bcs illpar
+          jsr asetxy
+          eor #$ff
+          and SEMVAL,x
+          sta SEMVAL,x
+          jmp ok
+          .)
+
+          .(
++teststd  php
+          cpx #STDIN
+          bcc stdok
+          pha
+          txa
+          sec
+          sbc #STDIN
+          clc
+          adc p0
+          tax
+          lda Env2tab+TE_STDIN,x
+          tax
+          pla
+stdok     plp
+          rts
+          .)
+
+          .(
+#ifndef NOMMU
+d         =syszp
+-syszp    +=1
+#else
+d         =sysmem
+-sysmem   +=1
+#endif
+
++dup      jsr memsys
+          php
+          cpx #STDIN
+          bcc duperr
+          stx d
+          tax
+          jsr teststd
+          txa
+          pha
+          lda d
+          clc
+          adc #<-STDIN
+          clc  
+          adc p0
+          tax
+          lda Env2tab+TE_STDIN,x
+          tay
+          pla
+          plp
+          bcc dupget
+          sta Env2tab+TE_STDIN,x
+dupget    tya
+          clc
+          jsr memtask
+          rts     
+duperr    plp
+          sec
+          lda #E_NOSTR
+          jsr memtask
+          rts
+          .)
+    
+          .(
++pbrk     jsr memsys
+          lda #TS_BRK
+          ldy p0
+          sta Envtab+TE_ST,y
+          jmp nexttask
+          .)
+
+          .(
++setblk   
+#ifndef NOMMU
+          jsr memsys
+          php
+          pha
+          jsr testenv    
+          bcs noenv
+          tya
+          pha
+          jsr setyenv
+          sty p1
+          pla
+          clc
+          adc p1
+          tay
+          lda Envtab+TE_MMU,y
+          tax
+          pla
+          plp
+          bcc a1
+          sta Envtab+TE_MMU,y
+a1        txa
+          clc
+          jsr memtask
+          rts
+noenv     pla
+          pla
+          lda #E_NOENV
+          sec
+          jsr memtask
+          rts
+#else
+          jsr memsys
+          php
+          sta p1
+          jsr testenv    
+          bcs noenv
+          plp
+          bcc sok 
+          cpy p1
+          bne econfig
+sok       tya
+          clc
+          jsr memtask
+          rts
+noenv     plp
+          lda #E_NOENV
+          .byt $2c
+econfig   lda #E_CONFIG
+          sec
+          jsr memtask
+          rts
+#endif
+          .)
+          
+          .(
+&testenv  cpx #OWNTASK
+          bne te1
+          ldx Task
+          clc
+          rts
+te1       cpx #$fe-ANZXENV
+          bcc te2
+          cpx #$fe
+          bcs te2
+          pha
+          lda Xenv-($fe-ANZXENV),x
+          tax
+          pla
+te2       cpx #ANZENV
+          rts            ; c=1 bei fehler
+          .)
+
++tdup     .(
+          jsr memsys
+          cpx #$fe-ANZXENV
+          bcc tdx
+          cpx #$fe
+          bcs tdx
+          sta Xenv-($fe-ANZXENV),x
+          clc
+          .byt $24
+tdx       sec
+          jsr memtask
+          rts
+          .)
+          
+          .) 
+

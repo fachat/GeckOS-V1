@@ -1,0 +1,67 @@
+
+#ifndef ROM
+
+#include  "oa1str.def"
+#include  "oa1sj.a65"
+
+          ;.word $700
+          *=$700
+          
+/*#define   NOPRG*/
+
+#endif
+
+          
+/*        Device-Block        */
+
+          .(
+
+#ifndef NOMMU
+-sysmem   =$300          /* werte um mit OS/A 1.33 nicht zu kollidieren    */
+-syszp    =$d0
+#endif
+
+#echo devices:
+#print sysmem
+#print syszp 
+
+#ifdef ROM
+          .word endd
+          .byt PK_DEV+$80
+          .byt 0         ; dummy
+          .word 0
+          .word devstart
+#ifndef ROMTEST
+          .byt (PRGSTART>>12)&$F,(PRGSTART>>12)&$f,<-1
+#else
+          .byt ((PRGSTART>>12)&$F),((PRGSTART>>12)&$F)+$10,<-1
+#endif
+          .asc "devices",0
+#else    
+#ifndef NOPRG
+          .word 0
+          .byt PK_DEV
+          .byt 0
+          .word 0
+          .word devstart
+          .byt 0,0,<-1
+#endif
+#endif
+
+devstart
+
+/*#include  "c:eigene\eigene.a65\osarom3\oadev\oa1dt.a65"*/
+#include  "oadev\oa1dt.a65"
+#include  "oadev\oa1dct.a65"
+#include  "oadev\oa1dnl.a65"
+#include  "oadev\oa1dsp.a65"
+#include  "oadev\oa1ds.a65"
+
+          .word $ffff
+
+
+#print sysmem
+#print syszp 
+
+endd      .)
+

@@ -1,0 +1,900 @@
+
+/**********************************************************************/
+/*                            Shell-Prg                               */
+/*                                                                    */
+/* wird aufgerufen mit :                                              */
+/*   SHORTMON       = Dis-/Assembler aus                              */
+/*   NOSYSFKT       = im Monitor nix mit Files/System-Aufrufen        */
+/*   NOMON          = kein Monitor                                    */
+/*   NOSH           = keine Shell                                     */
+/*   NOMMU          = sysmem/syszp werden 'durchgereicht'             */
+/*   ROM            = wird fÅr Startrom assembliert                   */
+/*   NOPRG          = wird zum laden und testen ohne PRG-Header ass.  */
+/*                                                                    */
+/*nicht erlaubt sind :                                                */
+/*   NOMON && NOSH                                                    */
+/*   NOSYSFKT && !NOSH                                                */
+/**********************************************************************/
+
+#ifndef ROM
+
+/*
+#define SHORTMON
+/*#define NOMON*/
+/*#define NOSH*/
+/*#define NOSYSFKT*/
+#define NOPRG
+/*#define STDTST*/
+/*#define SHOW*/
+*/
+
+#ifndef STDTST
+#include  "stdio.a65"
+#endif
+#endif
+
+#define   SEROUT    Putc
+#define   OUT       Fputc
+#define   SERIN     Getc
+#define   IN        Fgetc
+#define   SERBRK    Serbrk
+#define   CRLFOUT   Crlfout
+#define   TSERO     Txtout
+#define   HEXOUT    Hexout
+#define   DEZOUT    Dezbout
+
+          .(
+#ifdef ROM
+#ifndef NOSH
+#ifdef NOMON
+          .word PRGEND
+#else
+          .word prg1
+#endif
+          .byt  PK_PRG+$80
+          .byt  4
+          .byt  0,0
+          .word PRG
+#ifndef ROMTEST
+          .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt $c,$1c,$d,$1d,$e,$1e,<-1
+#endif
+          .byt  "shell",0,"shell b c:auto.bat",0
+#endif
+#ifndef NOMON
+prg1      .word PRGEND
+#ifdef NOSH
+          .byt  PK_PRG+$80
+          .byt  4,0,0
+#else
+#ifdef NOMMU
+          .byt  PK_PRG
+          .byt  4,7,7
+#else
+          .byt  PK_PRG+$80
+          .byt  4,7,7
+#endif
+#endif
+          .word PRG
+#ifndef ROMTEST
+          .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt $c,$1c,$d,$1d,$e,$1e,<-1
+#endif
+          .byt  "mon",0,"mon",0
+#endif
+#else
+
+#include  "oa1str.def"
+#include  "oa1sj.a65"
+#include  "oa1fs.def"
+
+#ifndef NOPRG
+          ;.word $800
+          *=$800
+          .word 0
+          .byt PK_PRG
+          .byt 12
+          .word 0
+          .word PRG
+          .byt <-1
+#else
+          .word $800
+          *=$800
+
+#endif
+
+#endif
+
+#ifndef NOMMU
+
+syszp     =$40
+sysmem    =$300
+
+#endif
+
+#echo shell:
+#print sysmem
+#print syszp
+
+/**********************************************************************/
+
+#define   MAXLEN    82
+#define   VSA       1
+#define   VSB       3
+#define   INDEPTH   8
+
+LZEI      =sysmem
+IOBUF     =sysmem+1
+-sysmem   +=1+MAXLEN
+
+          .(
+#ifndef NOSH
+MESSAGE   ="#"
+bef       =sysmem
+-sysmem   +=1
+#endif
+
+&PRG      
+#ifndef NOSYSFKT
+          jsr inipfad
+#endif
+#ifndef NOSH
+          jsr inistdin
+#endif
+#ifndef NOSYSFKT
+          jsr inistdout
+#endif
+#ifndef NOSH
+          lda #<initxt
+          ldy #>initxt
+          jsr TSERO
+
+          lda #<metxt
+          ldy #>metxt
+          jsr TSERO
+          jsr copycmd
+          bcs p2
+          bcc p1
+
+ploop     lda #<metxt
+          ldy #>metxt
+          jsr TSERO
+p2        jsr MLINEIN:bcs term
+p1        jsr CHRGOT
+          beq ploop
+          bne px1
+px2       jsr CHRGET
+px1       cmp #MESSAGE
+          beq px2
+          jsr testbef
+          bcs pll
+          jsr exebef
+          jmp pl2
+pll       jsr loadbef
+pl2       php
+          jsr oldoutstr
+          plp
+          bcs ple
+          jsr CRLFOUT
+          jmp ploop
+ple       lda #<errtxt
+          ldy #>errtxt
+          jsr TSERO
+          jmp ploop
+
+LOGOFF    pla
+          pla
+term      ;jsr clrpfad
+          jsr clrbatch
+#else
+          jsr MONITOR
+#endif
+#ifdef NOPRG
+          RTS
+#else
+          jmp TERM
+#endif
+#ifndef NOSH
+exebef    txa
+          asl
+          tay
+          lda befadr+1,y
+          pha
+          lda befadr,y
+          pha
+          rts
+
+testbef   ldx #0
+          stx bef
+tb1       ldy LZEI
+tb0       lda beftab,x
+          beq tbok
+          eor IOBUF,y
+          beq tb2a
+          cmp #$20
+          bne tb2
+tb2a      inx
+          iny
+          bne tb0
+tb2       inc bef
+          lda bef
+          cmp #anzbef
+          bcs tbx
+tb3       lda beftab,x
+          inx
+          cmp #0
+          bne tb3
+          beq tb1
+tbok      lda IOBUF,y
+          beq tbok1
+          cmp #" "
+          beq tbok1
+          cmp #"/"
+          bne tb2 
+tbok1     sty LZEI
+          clc
+          ldx bef
+tbx       rts
+
+#ifdef NOMON
+anzbef    =22
+#else
+anzbef    =23
+#endif
+
+beftab    .asc "DIR^@TYPE^@DEL^@FORMAT^@CHKDSK^@RENAME^@"
+          .asc "B^@BATCH^@"
+#ifndef NOMON
+&montxt   .asc "MONITOR^@"
+#endif
+          .asc "LOGOFF^@"
+          .asc "COPYCON^@DUP^@CD^@DEVCMD^@COPY^@"
+          .asc "GETSTR^@FRESTR^@SETMEM^@"
+          .asc "INFO^@KILL^@MKDIR^@RMDIR^@CHDIR^@"
+
+befadr    .word DIRECTORY-1,TYPE-1,DELETE-1,FORMAT-1,CHKDSK-1
+          .word RENAME-1,BATCH-1,BATCH-1
+#ifndef NOMON
+          .word MONITOR-1
+#endif
+          .word LOGOFF-1,COPYCON-1,PDUP-1,CD-1
+          .word PDEVCMD-1,COPY-1,PGETSTR-1,PFRESTR-1
+          .word SETMEM-1,PINFO-1,PKILL-1
+          .word MKDIR-1,RMDIR-1,CD-1
+
+initxt    .asc "^M^JSHELL V"
+          .byt VSA+"0",".",VSB+"0"
+          .asc "^M^J(C) 1990 BY A.FACHAT^M^J^@"
+errtxt    .asc " ?^M^J^@"
+metxt     .asc "^M^J"
+          .byt MESSAGE,0
+#endif
+          .)
+#ifndef NOMON
+#include  "oash\shmon.a65"
+#endif
+#ifndef NOSYSFKT 
+#include  "oash\shdir.a65"
+#endif
+
+#ifndef NOSH
+PINFO     .(
+cnt       =sysmem
+zei       =sysmem+1
+-sysmem   +=2
+
+          ldy #0
+i0        lda it,y
+          beq info
+          jsr SEROUT
+          iny
+          bne i0
+          
+info      jsr GETINFO
+          ldx #0
+          stx cnt
+infoloop  lda cnt
+          asl
+          asl
+          asl
+          asl
+          sta zei
+          lda cnt
+          jsr HEXOUT
+          jsr SSPOUT
+          ldx zei
+          lda PCBUF+TN_ST,x
+          cmp #TS_ENV+1
+          bcs name
+          ldx #8
+i1        jsr SSPOUT
+          dex
+          bne i1
+          beq i2
+name      ldy #0
+          ldx zei
+i4        lda PCBUF+TN_NAME,x
+          beq i3
+          jsr SEROUT
+          iny
+          inx
+          cpy #8
+          bcc i4
+i3        cpy #8
+          bcs i2
+          jsr SSPOUT
+          iny
+          bne i3
+i2        jsr SSPOUT
+          ldx zei
+          lda PCBUF+TN_ST,x
+          asl
+          asl
+          tax
+          ldy #4
+i5        lda st,x
+          jsr SEROUT
+          inx
+          dey
+          bne i5
+          jsr SSPOUT
+          ldx zei
+          lda PCBUF+TN_MEM,x
+          jsr HEXOUT
+          jsr SSPOUT
+          lda PCBUF+TN_STDIN,x
+          jsr HEXOUT
+          jsr SSPOUT
+          lda PCBUF+TN_STDOUT,x
+          jsr HEXOUT
+          jsr SSPOUT
+          lda PCBUF+TN_STDERR,x
+          jsr HEXOUT
+          jsr SSPOUT
+          jsr CRLFOUT
+          inc cnt
+          lda cnt
+          cmp #ANZ_ENV
+          bcs ie
+          jmp infoloop
+ie        clc
+          rts
+          
+st        .asc "FRE ENV IBRKBRK RDY IRQ WFRXWFTXWSEMWTRM"
+it        .asc "^M^JNr Name     Stat kB In OutErr^M^J",0
+
+&PKILL    jsr GETADR
+          bcs pke
+          sta cnt
+          jsr GETADR
+          ldx cnt
+          jsr KILL
+pke       rts
+          .)
+#endif            
+          .(
+Z0        =sysmem
+Z1        =sysmem+1
+-sysmem   +=2
+#ifndef NOSH
+&SETMEM   jsr GETADR
+          bcs MOP1
+#endif
+#ifndef NOMON
+&Setmem   
+#endif
+          cmp #0
+          beq MOP1
+          cmp #(PRG>>12)&$f ; bis maximal Programmstart umsetzen erlauben
+          bcs MOP1
+          sta Z0
+          lda #7 
+          sta Z1
+mop5      clc
+          ldx #OWNTASK
+          ldy Z1
+          jsr SETBLK
+          ldx Z1
+          cpx Z0
+          bcc mopram
+          tax
+          jsr FREMEM
+          lda #$0f
+          bne mopset
+mopram    cmp #$0f
+          bne mopnext
+          jsr GETMEM
+          bcs mopnext
+          txa
+mopset    sec
+          ldx #OWNTASK
+          ldy Z1
+          jsr SETBLK
+mopnext   dec Z1
+          bpl mop5
+          clc
+MOP1      RTS
+          .)
+          
+TOUPPER   .(
+          cmp #"a"
+          bcc tok
+          cmp #"z"+1
+          bcs tok
+          sbc #$1f
+tok       rts
+          .)
+
+LINEFEED  LDA #10:.BYT $2C
+#ifndef NOSYSFKT
+PNTOUT    lda #".":.byt $2c
+#endif
+#ifndef NOMON
+CROUT     LDA #13:.BYT $2C
+#endif
+SSPOUT    LDA #" ":JMP SEROUT
+
+          .(
+div       =sysmem
+Z0        =sysmem+1
+-sysmem   +=3
+
++CHRGET   inc LZEI
++CHRGOT   sty div
+          ldy LZEI
+          LDA IOBUF,Y
+          LDY div
+          CMP #" "
+          BEQ CHRGET
+          CMP #0
+          RTS
+
++GETADR   LDY LZEI:LDA #0:STA Z0:STA Z0+1
+GA1       LDA IOBUF,Y:bne get
+          jmp GAE
+get       INY
+          CMP #" ":BEQ GA1
+
+          CMP #"%"
+          BEQ GETBIN
+          cmp #"."
+          beq GETDEZ1
+          cmp #"$"
+          beq GETHEX
+          cmp #"&"
+          beq GETOKT
+          DEY
+          JMP GETHEX
+
+GETDEZ1   jmp GETDEZ
+
+GETHEX    lda IOBUF,y
+          jsr tsthex
+          bcs gae
+GA2       INY
+          ASL Z0:ROL Z0+1:ASL Z0:ROL Z0+1
+          ASL Z0:ROL Z0+1:ASL Z0:ROL Z0+1
+          ORA Z0:STA Z0
+          LDA IOBUF,Y
+          jsr tsthex
+          bcc GA2
+          jmp GAE1
+
+gae       jmp GAE
+
+gb1       SEC:SBC #"0"
+          CMP #2
+          BCS GAE1
+          iny
+          lsr
+          rol Z0:rol Z0+1
+GETBIN    lda IOBUF,Y
+          beq GAE1
+          bne gb1
+
+go1       sec:sbc #"0"
+          cmp #8
+          bcs GAE1
+          iny
+          asl Z0:rol Z0+1
+          asl Z0:rol Z0+1
+          asl Z0:rol Z0+1
+          ora Z0:sta Z0
+GETOKT    lda IOBUF,y
+          beq GAE1
+          bne go1
+          
+gd1       sec:sbc #"0"
+          cmp #10
+          bcs GAE1
+          iny
+          pha
+          asl Z0:rol Z0+1
+          lda Z0:ldx Z0+1
+          asl Z0:rol Z0+1
+          asl Z0:rol Z0+1
+          clc:adc Z0:sta Z0
+          txa:adc Z0+1:sta Z0+1
+          pla
+          clc
+          adc Z0
+          sta Z0
+          bcc GETDEZ
+          inc Z0+1
+GETDEZ    lda IOBUF,y
+          beq GAE1
+          bne gd1
+
+GAE1      LDA Z0:LDX Z0+1
+          CLC:sty LZEI
+          rts
+
+GAE       SEC
+          lda IOBUF,y
+          STY LZEI
+          RTS
+/*
++TSERO    .(
+ZEI       =syszp
+-syszp    +=2
+
+          STA ZEI:STY ZEI+1
+          LDY #0
+TSO1      LDA (ZEI),Y:BEQ TSO2
+          JSR SEROUT:INY:BNE TSO1
+TSO2      RTS
+          .)
+*/
+&tsthex   .(
+          cmp #"A"-1
+          bcs th1
+          sbc #"0"-1
+          cmp #10
+          bcc thok
+therr     sec
+          rts
+th1       beq therr
+          and #%00011111
+          cmp #7
+          bcs therr
+          adc #9
+thok      clc
+          rts
+          .)
+
++MLINEIN  .(
+#ifndef NOSH
+li1       =sysmem
+-sysmem   +=1
+#endif
+          LDY #0
+MO1       JSR SERIN
+          bcc mo1a
+#ifndef NOSH
+          sty li1
+          jsr clstdin
+          ldy li1
+          bcc MO1
+#endif
+          bcs MO2S
+
+mo1a      cmp #$1f
+          bcs MO1A
+
+          CMP #TC_CR:BEQ MO2
+
+          CMP #8:BNE MO1
+          cpy #0:beq MO1
+          dey
+          jsr SEROUT
+/*#ifdef SHOW         
+          ldx #STDERR
+          jsr OUT
+#endif*/
+          jmp MO1
+
+MO1A      STA IOBUF,Y
+          jsr SEROUT
+/*#ifdef SHOW
+     ldx #STDERR
+     jsr OUT
+#endif*/
+          INY:CPY #MAXLEN
+          BCC MO1:bcs MO2
+MO2S      sec:.byt $24
+MO2       CLC
+/*#ifdef SHOW
+          php
+          lda #13
+          ldx #STDERR
+          jsr OUT
+          lda #10
+          jsr OUT
+          plp
+#endif*/
+          LDA #0:STA IOBUF,Y
+          sta LZEI
+          RTS
+          .)
+#ifndef NOSH
+&copycmd  .(
+          ldx #<-1
+          ldy #0
+          lda #" "
+          sta LZEI
+cc1       inx
+          lda PCBUF,x
+          beq cce
+          cmp #" "
+          beq cc1
+          cmp #34
+          bne cc2c
+          sta LZEI
+          inx
+cc2c  
+#ifndef NOMON
+          lda PCBUF,x
+          cmp #"m"
+          bne cc2d
+          ldx #0
+cc2a      lda montxt,x
+          sta IOBUF,x
+          beq cc2b
+          jsr SEROUT
+          inx
+          bne cc2a 
+#else
+          dex
+#endif
+cc2       inx
+cc2d      lda PCBUF,x
+          beq cce   
+          cmp LZEI
+          bne cc2
+cc3       inx
+          lda PCBUF,x
+          beq cce
+          cmp #" "
+          beq cc3
+cc4       lda PCBUF,x
+          sta IOBUF,y
+          jsr SEROUT
+          iny
+cc2b      inx
+          cmp #0
+          bne cc4
+          lda #0
+          sta LZEI
+          clc
+          rts
+cce       sec
+          rts
+          .)
+#endif
+          .)
+#ifndef NOSH
+          .(
+insp      =sysmem
+inst      =sysmem+1
+
+-sysmem   +=1+INDEPTH
+
+&inistdin .(
+          lda #0
+          sta insp
+          rts
+          .)
+
+&opstdin  .(        /* a=neuer StdIn-Stream  */
+          ldx insp
+          cpx #INDEPTH
+          bcs ope
+          ldx #STDIN
+          sec
+          jsr DUP
+          ldx insp
+          sta inst,x
+          inc insp
+          clc
+ope       rts
+          .)
+
+&clstdin  .(
+          ldx insp
+          sec
+          beq ope
+          dex
+          lda inst,x
+          stx insp
+          sec
+          ldx #STDIN
+          jsr DUP
+          tax
+          lda #SC_NUL
+          jsr STRCMD
+          clc
+&ope      rts
+          .)
+
+&clrbatch .(
+          ldx insp
+          beq ope
+          dex
+          lda inst,x
+          stx insp
+          tax
+          lda #SC_NUL
+          jsr STRCMD
+          jmp clrbatch
+          .)
+          .)
+#endif
+
+#ifdef NOSYSFKT
+setout    rts
+#else
+          .(
+outstr    =sysmem
+-sysmem   +=1
+
+&inistdout .(
+          lda #<-1
+          sta outstr
+          rts
+          .)
+
+&setout   .(
+          jsr CHRGOT
+          cmp #">"
+          beq s1
+s2        rts
+s1        inc LZEI
+          jsr wopenfile
+          bcs s2
+          txa  
+          ldx #STDOUT
+          sec
+          jsr DUP
+          sta outstr
+          rts
+          .)
+
+&oldoutstr .(
+          lda outstr
+          bmi o1
+          jsr CRLFOUT
+          lda outstr
+          sec
+          ldx #STDOUT
+          jsr DUP
+          tax
+          lda #SC_EOF
+          jsr STRCMD
+          lda #<-1
+          sta outstr
+o1        rts
+          .)
+          .)
+#endif
+
+#ifndef NOSYSFKT
+ldezout   .(
+
+da        =syszp
+lb        =syszp+2
+lo        =syszp+3
+w         =syszp+4
+out       =syszp+8
+cnt       =syszp+9
+-syszp    +=10
+
+          sta da
+          sty da+1
+          stx lb
+          ldx #39
+
+l1        ldy #3
+l1c       lda dtab,x
+          sta w,y
+          dex
+          dey
+          bpl l1c
+          stx lo
+          iny
+          sty out
+          sty cnt
+l2a       ldy #3
+l2        lda (da),y
+          cmp w,y
+          bcc sloop
+          bne shift
+          dey
+          bpl l2
+          bmi xsub
+shift     ldy #0
+          ldx #4
+          clc
+h1        lda w,y
+          rol
+          sta w,y
+          iny
+          dex
+          bne h1
+          bcs ende
+          inc cnt
+          bne l2a
+
+sloop     dec cnt
+          bmi end
+          ldy #3
+          clc
+s0        lda w,y
+          ror
+          sta w,y
+          dey
+          bpl s0
+
+xsub      ldy #3
+x0        lda (da),y
+          cmp w,y
+          bcc d0
+          bne d1
+          dey
+          bpl x0
+d1        ldy #0
+          ldx #4
+          sec
+d1a       lda (da),y
+          sbc w,y
+          sta (da),y
+          iny
+          dex
+          bne d1a
+          sec
+          .byt $24
+d0        clc
+          rol out
+          jmp sloop
+         
+end       lda out
+          beq e3
+          ldx #0
+          stx lb
+          beq e1
+e3        bit lo
+          bmi e1
+          lda lb
+          bne e2
+e1        ora #"0"
+e2        jsr SEROUT
+          
+          ldx lo
+          bmi l1b
+          jmp l1
+l1b ende  rts                   
+          
+dtab      .word 1,0
+          .word 10,0
+          .word 100,0
+          .word 1000,0
+          .word 10000,0
+          .word 34464,1
+          .word 16960,15
+          .word 38528,152
+          .word 57600,1525
+          .word 51712,15258
+          .)
+#endif
+
+#print sysmem
+#print syszp
+                
+#ifdef STDTST
+#define   ROM
+#include  "stdio.a65"
+#endif
+        
+PRGEND    .)
+

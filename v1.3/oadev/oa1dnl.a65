@@ -1,0 +1,92 @@
+
+#define   ANZINSTR  16
+
+          .(
+          .word nulend
+          jmp nulprg
+          .asc "nuldev",0
+
+anzinstr  =sysmem
+instr     =sysmem+1
+-sysmem   +=1+ANZINSTR
+
+nulprg    cmp #DC_RES
+          bne sp1
+          
+          ldy #0
+          sty anzinstr
+          lda #<-1
+ni1       sta instr,y
+          iny
+          cpy #ANZINSTR
+          bcc ni1
+          clc
+          rts
+
+sp1       cmp #DC_IRQ
+          bne sp2
+
+          ldy #0
+spil      ldx instr,y
+          bmi spiln
+          jsr GETC
+          bcc spil
+          cmp #E_EOF
+          bne spiln
+
+          ldx instr,y
+          lda #SC_NUL
+          jsr STRCMD
+          lda #<-1
+          sta instr,y
+
+spiln     iny
+          cpy #ANZINSTR
+          bcc spil
+          clc
+          rts
+
+sp2       cmp #DC_RX_OFF
+          beq nlnotimp
+          cmp #DC_TX_OFF
+          bne sp3
+          ldy #0              ; rxoff
+rxo1      ldx instr,y
+          lda #SC_NUL
+          jsr STRCMD
+          lda #<-1
+          sta instr,y
+          iny
+          cpy #ANZINSTR
+          bcc rxo1
+          bcs ok
+
+sp3       cmp #DC_RX_ON
+          beq nlnotimp
+          cmp #DC_TX_ON
+          bne sp5
+
+ok        lda #0
+          .byt $2c
+nlnotimp  lda #E_NOTIMP
+          .byt $2c
+nldevon   lda #E_DON
+          cmp #1
+          rts
+
+sp5       cmp #DC_GS
+          bne nlnotimp
+          ldx #0
+sp5a      lda instr,x
+          bpl sp5n
+          tya
+          sta instr,x
+          clc
+          rts
+sp5n      inx
+          cpx #ANZINSTR
+          bcc sp5a
+          bcs nldevon
+
+nulend    .)
+

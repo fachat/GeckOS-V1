@@ -1,0 +1,113 @@
+
+#ifndef   RESET
+
+#ifdef    SYSTEM
+
+RESET     jmp preset
+NMI       jmp pnmi
+IRQ       jmp pirq
+
+GETMEM    jmp getmem    
+FREMEM    jmp fremem
+GETBLK    jmp getblk
+ENMEM     jmp enmem
+
+GETSTR    jmp getstr    
+FRESTR    jmp frestr
+PUTC      jmp putc
+GETC      jmp getc
+UNGETC    jmp ungetc
+STRCMD    jmp gets
+
+DEVCMD    jmp devcmd
+
+GETENV    jmp getenv
+FREENV    jmp freenv
+SETBLK    jmp setblk
+
+FORK      jmp fork
+TERM      jmp term
+KILL      jmp kill
+SUSPEND   jmp suspend
+WTERM     jmp wterm
+
+GETINFO   jmp getinfo
+
+DUP       jmp dup
+SETIRQ    jmp setirq
+TRESET    jmp treset
+
+GETSEM    jmp getsem
+FRESEM    jmp fresem
+PSEM      jmp psem
+VSEM      jmp clrsem
+
+SEND      jmp send
+RECEIVE   jmp receive
+
+WRITE     jmp write
+READ      jmp read
+
+TDUP      jmp tdup
+SIGNAL    jmp signal
+XRECEIVE  jmp xreceive
+
+SETNMI    jmp setnmi
+
+#else
+
+RESET     =$f000
+NMI       =$f003
+IRQ       =$f006
+
+GETMEM    =$f009
+FREMEM    =$f00c
+GETBLK    =$f00f
+ENMEM     =$f012
+
+GETSTR    =$f015
+FRESTR    =$f018
+PUTC      =$f01b
+GETC      =$f01e
+UNGETC    =$f021
+STRCMD    =$f024
+
+DEVCMD    =$f027
+
+GETENV    =$f02a
+FREENV    =$f02d
+SETBLK    =$f030
+
+FORK      =$f033
+TERM      =$f036
+KILL      =$f039
+SUSPEND   =$f03c
+WTERM     =$f03f
+
+GETINFO   =$f042
+
+DUP       =$f045
+SETIRQ    =$f048
+TRESET    =$f04b
+
+GETSEM    =$f04e
+FRESEM    =$f051
+PSEM      =$f054
+VSEM      =$f057
+
+SEND      =$f05a
+RECEIVE   =$f05d
+
+WRITE     =$f060
+READ      =$f063
+
+TDUP      =$f066
+SIGNAL    =$f069
+XRECEIVE  =$f06c
+
+SETNMI    =$f06f
+ 
+#endif
+
+#endif
+

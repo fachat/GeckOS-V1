@@ -1,0 +1,305 @@
+
+#ifndef   P_KIND
+
+/*        System-Defs              */
+
+#define   SYSPORT   $efe0
+#define   MMU       $eff0
+#define   BLKSIZ    $1000
+#define   SYSPAGE   $0             /* $12 zum testen, wenn System nicht startet  */
+#ifndef NOMMU
+#define   PRGSTART  $8000
+#else
+#define   PRGSTART  $c000
+#endif
+
+#define   DVT_ADR   0
+#define   DVT_POS   2
+#define   DVT_BLK   3
+#ifdef NOMMU
+#define   DVT_SLEN  2
+#else
+#define   DVT_SLEN  4
+#endif
+
+/*        Prg-Header               */
+
+#define   P_KIND    0
+#define   P_MEM     1         /* ungÅltig bei Device             */
+#define   P_RES     2         /* zwei Byte reserviert            */
+#define   P_ADR     4
+#define   P_TAB     6
+
+/*        Prg-Kinds                */
+
+#define   PK_PRG    0
+#define   PK_DEV    1         /* Max innerhalb eines 4k Blocks   */
+#define   PK_FS     2         /* Std-Streams auf Nulldev         */
+ 
+/*        Hardware-Errors          */
+
+#define   HE_ZP     <-1
+#define   HE_RAM    <-2
+#define   HE_IMEM   <-3
+#define   HE_IDEV   <-4
+#define   HE_ISTR   <-5
+#define   HE_IENV   <-6
+#define   HE_ROM    <-7
+#define   HE_DEV    <-8
+#define   HE_TASK   <-9
+
+/*        Software-Errors          */
+
+#define   E_OK      0
+#define   E_NOTIMP  <-1
+#define   E_CONFIG  <-2
+#define   E_ILLPAR  <-3
+#define   E_NOMEM   <-4
+
+#define   E_NOSTR   <-5
+#define   E_SFULL   <-6
+#define   E_SEMPTY  <-7
+#define   E_SLWM    <-8
+#define   E_SHWM    <-9
+#define   E_EOF     <-10
+#define   E_NUL     <-11
+
+#define   E_NODEV   <-12
+#define   E_DON     <-13
+#define   E_DOFF    <-14
+#define   E_NOTX    <-15
+#define   E_NOENV   <-16
+#define   E_NOSEM   <-17
+#define   E_SEMSET  <-18
+
+#define   E_FNODRV  <-19
+#define   E_FNOPATH <-20
+#define   E_FNONAM  <-21
+#define   E_FNOFIL  <-22
+#define   E_FWPROT  <-23
+
+#define   E_CMD     <-65
+#define   E_Q       <-66
+#define   E_GT      <-67
+#define   E_RD      <-68
+#define   E_WR      <-69
+#define   E_V       <-70
+#define   E_FT      <-71
+
+#define   E_NOCLUS  <-72      /* kein Cluster mehr frei               */
+#define   E_INVDATA <-73      /* inkonsistente Daten auf der Diskette */
+#define   E_ILLCLUS <-74      /* Cluster =1 oder >F_CLUS              */
+#define   E_VALBUF  <-75      /* versucht gÅltigen Sektor mit XW zu schreiben   */
+#define   E_FILEXIST <-76     /* Datei gibt es schon                  */
+#define   E_DISKFULL <-77     /* Diskette voll                        */
+#define   E_DNEMPTY <-78      /* bei rmdir Subdir nicht leer          */
+#define   E_NOFILE  <-79      /* keine File-Struktur frei             */
+#define   E_ILLNAM  <-80      /* Name mit Sonderzeichen *,?,"         */
+#define   E_FOPEN   <-81      /* file fÅr Zugriff locked (file opened)*/
+
+/*        Stream-Commands          */
+
+#define   SC_GET    0
+#define   SC_REG_RD 1
+#define   SC_REG_WR 2
+#define   SC_CLR    3
+#define   SC_EOF    4
+#define   SC_NUL    5
+#define   SC_FRE    6
+#define   SC_STAT   7
+#define   SC_GANZ   8
+#define   SC_RWANZ  9
+
+/*        Device-Commands          */
+
+#define   DC_IRQ    0
+#define   DC_RES    1
+#define   DC_GS     2
+#define   DC_PS     3
+#define   DC_RX_ON  4  
+#define   DC_TX_ON  5
+#define   DC_RX_OFF 6
+#define   DC_TX_OFF 7
+#define   DC_SPD    8
+#define   DC_HS     9
+#define   DC_ST     10
+#define   DC_EXIT   11
+
+#define   DC_GNAM   16
+#define   DC_GNUM   17
+#define   DC_REGDEV 18
+
+#define   DC_SW_RX  %10000000
+#define   DC_SW_TX  %01000000
+
+#define   REGDEV_MPOS    0
+#define   REGDEV_MBLK    1
+#define   REGDEV_ADR     2
+
+/*        Task Status              */
+
+#define   TS_FRE    0
+#define   TS_ENV    1
+#define   TS_IBRK   2    /* Task hat im IRQ einen brk ausgefÅhrt */
+#define   TS_BRK    3    /* Task hat brk ausgefÅhrt */
+#define   TS_RDY    4
+#define   TS_IRQ    5
+#define   TS_WFRX   6
+#define   TS_WFTX   7
+#define   TS_WFSEM  8
+#define   TS_WTERM  9
+#define   TS_SIG    10
+#define   TS_WXTX   11
+
+/*        Info-Struktur            */
+
+#define   TNAMLEN   8
+#define   ANZ_ENV   16             /* Anzahl gÅltiger EintrÑge in Info */
+
+#define   TN_ST     0
+#define   TN_MEM    1
+#define   TN_SP     2
+#define   TN_IRQ    3
+#define   TN_STDIN  5
+#define   TN_STDOUT 6
+#define   TN_STDERR 7
+#define   TN_NAME   8
+#define   TN_SLEN   16
+
+/*        Terminal Commands        */
+
+#define   TC_BEL    7
+#define   TC_BS     8
+#define   TC_HT     9
+#define   TC_LF     10
+#define   TC_VT     11
+#define   TC_FF     12
+#define   TC_CR     13
+#define   TC_ESC    27
+
+#define   TC_CLFT   $80
+#define   TC_CRGT   $81
+#define   TC_CUP    $82
+#define   TC_CDWN   $83
+#define   TC_HOME   $84
+#define   TC_CLR    $85
+#define   TC_DEL    $86
+#define   TC_INS    $87
+#define   TC_WLO    $88    
+#define   TC_WRU    $89  
+#define   TC_WCLS   $8a
+#define   TC_EOL    $8b
+#define   TC_CLL    $8c
+
+/*        SysProcCalls             */
+
+#define   SEND_SYS       $ff
+
+#define   PCBUF     $200
+
+#define   SP_FORK        0
+#define   SP_SETIRQ      1
+#define   SP_RESET       2
+
+#define   FORK_ENV       0
+#define   FORK_STDIN     1
+#define   FORK_STDOUT    2
+#define   FORK_STDERR    3
+#define   FORK_ADR       4
+#define   FORK_NAME      6    /* Ende bei Nullbyte     */
+
+#define   SETIRQ_ENV     0
+#define   SETIRQ_ADR     1
+#define   SETIRQ_SLEN    3
+
+#define   RESET_ENV      0
+#define   RESET_ADR      1
+#define   RESET_SLEN     3
+
+/*        StdStream                */
+
+#define   STDNUL         $fc       /* wird ignoriert (z.b. fÅr FS)    */
+#define   STDIN          $fd
+#define   STDOUT         $fe
+#define   STDERR         $ff
+
+#define   OWNTASK        $ff
+
+/*        FileManager              */
+
+#define   SEND_FM        $fe
+
+#define   FM_REG         0
+
+#define   FM_REG_DRVS    0
+#define   FM_REG_ENV     1
+
+#define   FM_OPEN_DRV    0
+
+/*        TimeTask                 */
+
+#define   SEND_TIME      $fc
+
+#define   TI_SET         0
+#define   TI_GET         1
+
+#define   TE_SG_YEAR     0
+#define   TE_SG_MONTH    1
+#define   TE_SG_DAY      2
+#define   TE_SG_HOUR     3
+#define   TE_SG_MIN      4
+#define   TE_SG_SEC      5
+
+/*        SysIO                    */
+
+#define   SYS_KEY   %01000000
+#define   SYS_EXTIO %00010000
+#define   SYS_LED   %00001000
+#define   SYS_IRQEN %00000010
+#define   SYS_RTS   %00000100
+#define   SYS_TIRQ  %10000000 /* bmi/bpl          */
+#define   SYS_IRQ   %00000001
+
+/*        Struct    PIA 6821       */
+
+#define   PIA_PA    0
+#define   PIA_CRA   1
+#define   PIA_PB    2
+#define   PIA_CRB   3
+
+/*        Struct    VIA 6522       */
+
+#define   VIA_DRB   0
+#define   VIA_DRA   1
+#define   VIA_DDRB  2
+#define   VIA_DDRA  3
+#define   VIA_T1CL  4
+#define   VIA_T1CH  5
+#define   VIA_T1LL  6
+#define   VIA_T1LH  7
+#define   VIA_T2CL  8
+#define   VIA_T2CH  9
+#define   VIA_SR    10
+#define   VIA_ACR   11
+#define   VIA_PCR   12
+#define   VIA_IFR   13
+#define   VIA_IER   14
+#define   VIA_DRBX  15
+
+/*        Struct WD 1772           */
+
+#define   WD_CMD    0
+#define   WD_ST     0
+#define   WD_TRCK   1
+#define   WD_SECT   2
+#define   WD_DATA   3
+
+/*        ACIA 6551                */
+
+#define   ACIA_DR   0
+#define   ACIA_SR   1
+#define   ACIA_CMD  2
+#define   ACIA_CTRL 3
+
+#endif
+

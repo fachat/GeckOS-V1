@@ -1,0 +1,102 @@
+/**************************************************************************/
+/*                              OS/A 1.31                                 */
+/*                                                                        */
+/*   folgende Optionen kînnen gewÑhlt werden:                             */
+/*     ROM          ohne ROM werden die Optionen in dieser Datei gesetzt  */
+/*     ROMTEST      mit ROMTEST wird auf RAM-Test und MMU-Load verzichtet */
+/*                  und die Blocks bei $8-$f mit GETBLK gesichert         */
+/*     CMOSCPU      falls CMOS-CPU benutzt wird (Rockwell)                */
+/*     NOMMU        falls Rechner ohne MMU benutzt wird                   */
+/*     NOSYSPORT    falls Rechner ohne SYSPORT ($efe0) benutzt wird       */
+/*     NOSINPORT    falls Rechner ohne SYSPORT benutzt wird; trotzdem     */
+/*                  wird LED z.B. angesteuert - bei Fehlern braucht nur   */
+/*                  eine Karte mit einem SYSPORT eingesteckt werden       */
+/*                  Die Input-Leitungen werden ignoriert                  */
+/*                  funktioniert nicht mit NOSYSPORT - also entweder oder */
+/*     NOENVIRQ     falls darauf verzichtet wird, daû jeder Task einen    */
+/*                  eigenen IRQ haben kann (beschleunigt das Ganze)       */
+/*     BATMEM       beim Speicher-Test wird der Hauptspeicher nicht       */
+/*                  geloescht (falls Batteriegepufferter Speicher benutzt */
+/*                  wird                                                  */
+/*     NOMIRRORMEM  Falls sicher kein gespiegeltes RAM auftaucht wird's   */
+/*                  etwas kÅrzer                                          */
+/*     CLK2MHZ      Falls NOSYSPORT wird hier der Wert, der an Devices    */
+/*                  gesendet wird, festgelegt.                            */
+/*     NMIDEV       ermîglicht Behandlung von nmi's - aber nur ohne MMU   */
+/**************************************************************************/
+
+
+#ifndef ROM
+
+#define   CMOSCPU
+/*#define   NOMMU   */
+/*#define   NOSYSPORT   */
+/*#define   NOENVIRQ*/
+#define   NMIDEV
+
+#define   ROM
+
+#include  "oa1con.def"
+#include  "oa1str.def"
+
+start     =$1000
+          .word start
+          *=$F000 
+
+#endif
+
+-syszp    =$2
+
+#ifndef NOMMU
+-sysmem   =$400
+-sysblk   =$1000
+#else
+-sysmem   =$300
+-sysblk   =$800
+#endif
+
+#define   VA        1
+#define   VB        3
+#define   VC        3
+
+#define   D_Y       92
+#define   D_M       10
+#define   D_D       17
+
+#define   SYSTEM
+
+#echo system:
+#print syszp
+#print sysmem
+#print sysblk
+
+#include  "oa1\oa1sj.a65"
+#include  "oa1\oa1si.a65"
+#include  "oa1\oa1sd.a65"
+#include  "oa1\oa1sm.a65"
+#include  "oa1\oa1ss.a65"
+#include  "oa1\oa1se.a65"
+#include  "oa1\oa1sf.a65"
+
+#print    sysblk
+#print    sysmem
+#print    syszp
+
+#if  sysblk<sysmem
+#echo     kein System-Speicher mehr !!
+#endif
+
+POT2      .byt 1,2,4,8,$10,$20,$40,$80
+
+#if * > $fff4
+#echo     Das Programm ist zu lang!
+#print *+12 
+#endif
+
+#if * < $fff4
+          .dsb $fffa-*-6,<-1
+#endif
+          .byt D_D,D_M,D_Y,VA,VB,VC
+          .word NMI,RESET,IRQ
+
+
