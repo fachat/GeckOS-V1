@@ -36,11 +36,6 @@
  *	
  */
 
-#ifndef DB
-#define DB(a)
-sysmem	=$400
-syszp	=$80
-#endif
 
 #define	DEBUGTCP
 
@@ -56,7 +51,8 @@ doffset	=sysmem+2	; data offset from ip!
 toffset	=sysmem+3	; tcp header offset from ip!
 seg_flag=sysmem+4	; incoming segment flag byte
 tslot	=sysmem+5	; incoming segment memory slot
--sysmem	+=6
+discd	=sysmem+6	; data preceding valid data in segment
+-sysmem	+=8
 tcb	=sysmem
 -sysmem	+=MAXCONN*TCB_LEN
 phdr	=sysmem
@@ -129,11 +125,19 @@ c2	lda phdr,y
 	cpy #TPH_LEN
 	bne c2
 
+#if 0 /*def DEBUGTCP*/
+DB("TCP check: id=")
+lda id+1: jsr EHexout: lda id: jsr EHexout
+DB(", len=")
+lda id+3: jsr EHexout: lda id+2: jsr EHexout
+jsr ECrlfout
+#endif
+
 	lda #<id
 	ldy #>id
 	jsr checksum2
 
-#ifdef DEBUGTCP
+#if 0 /*def DEBUGTCP*/
 php
 pha
 txa
@@ -157,6 +161,10 @@ plp
         jmp discard
 
 tcpok	/* here we have a valid TCP packet in (id),0-idlen. */
+
+	lda #0		; data to be discarded at packet beginning.
+	sta discd
+	sta discd+1
 
 	ldy #TH_FLAG
 	lda (id),y
@@ -307,7 +315,7 @@ stab	.word 	tcp_closed-1, tcp_listen-1, tcp_synrxd-1, tcp_syntxd-1
 
 tmp	=sysmem
 tmp2	=sysmem+1
--sysmem	+=2
+-sysmem	+=4	; should be able to hold seq number
 
 tcp_closed .(
 	lda seg_flag
@@ -393,10 +401,14 @@ tcp_listen .(
 	jmp nosyn
 &listen_syn
 	DB("Listen_syn^m^j")
+#if 0
 	jsr rxhdr
 	bcc okhdr
 	jmp disc
 okhdr
+#endif
+	jsr seqsyn
+
 	jsr hasdata
 	beq nodat
 	jsr copy_n_queue
@@ -583,29 +595,7 @@ idat
 	lda #1
 	ldx #0
 	jsr addrxnxt
-#if 0
-	ldy #TCB_RCV_NXT+3
-	lda (tcbp),y
-	clc
-	adc #1
-	sta (tcbp),y
-	dey
-	bcc noinc
-	lda (tcbp),y
-	adc #0
-	sta (tcbp),y
-	dey
-	bcc noinc
-	lda (tcbp),y
-	adc #0
-	sta (tcbp),y
-	dey
-	bcc noinc
-	lda (tcbp),y
-	adc #0
-	sta (tcbp),y
-noinc
-#endif
+
 	jsr setack
 	jsr setseq
 	ldy #TH_FLAG
@@ -626,6 +616,17 @@ f1
 	/* TODO: check other states */
 
 nofin	
+#if 1
+	ldx tslot
+	bmi noslot
+	
+	jsr setack
+	jsr setseq
+	ldy #TH_FLAG
+	lda #THF_ACK
+	sta (id),y
+	jmp bangbuf	; maybe check with retransmissions...
+#endif
 tdisc	ldx tslot
 	bmi noslot
 	jsr bfree
@@ -674,6 +675,32 @@ tdiscard .(
 	rts
 	.)
 
+seqsyn	.(
+	ldy #TH_SEQ+3
+	clc
+	lda (id),y
+	adc #1
+	sta (id),y
+	sta (tcbp),y
+	dey 
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+	dey
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+	dey
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+	rts
+	.)
+
+#if 0
 rxhdr	.(
 	lda seg_flag
 	and #THF_SYN
@@ -726,19 +753,74 @@ noack
 	sec
 	rts
 	.)
+#endif
 
 checkseq .(
 	ldy #TH_SEQ	/* we don't handle disordered packets - ignore them */
 seql	lda (id),y
 	cmp (tcbp),y
-	bne seqmismatch
-	iny
+	bcc lesscheck
+	bne seqmm1
+next 	iny
 	cpy #TH_SEQ+4
 	bcc seql
 	clc
 	rts
+lesscheck
+	ldy #TH_SEQ+3
+	lda (id),y
+	clc
+	adc dlen
+	sta tmp+3
+	dey
+	lda (id),y
+	adc dlen+1
+	sta tmp+2
+	dey
+	lda (id),y
+	adc #0
+	sta tmp+1
+	dey
+	lda (id),y
+	adc #0
+	sta tmp
+
+	ldy #TCB_RCV_NXT
+seqt	lda tmp-TCB_RCV_NXT,y
+	cmp (tcbp),y
+	bcc seqmm1
+	bne setdiscd
+	iny
+	cpy #TCB_RCV_NXT+4
+	bcc seqt
+seqmm1	DB("Sequence mismatch^m^j")
+	sec
+	rts
+
+setdiscd
+	ldx #4
+	ldy #TCB_RCV_NXT+3
+	sec
+s1	lda (tcbp),y
+	sbc (id),y
+	sta tmp-TCB_RCV_NXT,y
+	dey
+	dex
+	bne s1
+
+	lda tmp
+	ora tmp+1
+	bne seqmm1
+
+	lda tmp+2
+	sta discd+1
+	lda tmp+3
+	sta discd
+	clc
+	rts
 	.)
 
+#if 0
 doopts	.(
 	ldy #TH_DOFFSET
 	lda (id),y
@@ -794,6 +876,7 @@ no_options
 	clc
 	rts
 	.)
+#endif
 
 p2	=syszp
 -syszp	+=2
@@ -1168,6 +1251,9 @@ myslot	=sysmem
 myp	=syszp
 -syszp	+=2
 
+clc		; somewhere here is a bug that crashes memory mangement
+rts
+
 	lda doffset
 	ldy #0
 	jsr balloc
@@ -1186,15 +1272,21 @@ l0	lda (ip),y
 
 	ldy #0
 	lda doffset
+	clc
+	adc discd
 	sta (ip),y		/* save for queue routines */
 	tya
+	adc discd+1
 	iny
 	sta (ip),y
 	iny
 	lda dlen
+	sec
+	sbc discd
 	sta (ip),y
 	iny
 	lda dlen+1
+	sbc discd+1
 	sta (ip),y
 
 	lda myp
@@ -1358,6 +1450,7 @@ l1	dec zp
 
 	ldx slot
 	jsr bfree
+	clc
 	rts
 	.)
 

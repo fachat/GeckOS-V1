@@ -270,7 +270,7 @@ esc2
 	bcs ende
 			; free buffer slot
 	ldx oslot
-;	jsr bfree
+	jsr bfree
 
 	dec onslot
 	ldy #0
@@ -491,8 +491,8 @@ gotpacket
 	sty iend+1
 	and #1
 	beq even	; fill up with nullbyte if length is odd
-	tay
 	lda #0
+	tay
 	sta (ip),y
 even
 	jsr getbadr
@@ -504,7 +504,7 @@ even
 	beq discard	; zero length packet received
 ok
 
-#if 1 /*def DEBUGPKT*/
+#if 0 /*def DEBUGPKT*/
 	/* so what now? */
 DB("Received Packet:^m^j")
 	jsr printpacket
@@ -662,7 +662,18 @@ p	=syszp
 	sta len+1
 	dey
 	lda (p),y
+	sec
+	sbc #1		; dec length by one - for odd/even length handling
 	sta len
+	bcs x1
+	lda len+1
+	bne endx	; underflow -> length < 1 -> return
+	tax
+	clc
+	rts
+endx
+	dec len+1
+x1
 	dey
 	lda (p),y
 	tax
@@ -670,7 +681,11 @@ p	=syszp
 	lda (p),y
 	sta p
 	stx p+1
-
+#if 0
+DB("Check: ")
+lda p+1:jsr EHexout: lda p: jsr EHexout:lda #" ": jsr ECout
+lda len+1:jsr EHexout: lda len: jsr EHexout: jsr ECrlfout
+#endif
 	lda #0
 	sta tmp
 	sta tmp+1
@@ -693,7 +708,7 @@ l0
 	iny
 	bne l1
 	inc p+1
-l1
+l1	
 	lda len
 	sec
 	sbc #2
@@ -702,11 +717,18 @@ l1
 	lda len+1
 	sbc #0
 	sta len+1
-	bcc l1b		; underflow (odd size) -> end
+	bcc loope	; underflow (even size) -> end
 l1a	lda len		
 	ora len+1
 	bne loop
-l1b
+
+l1b	lda (p),y
+	clc
+	adc tmp+1
+	sta tmp+1
+	bcc loope
+	inc tmp+2
+loope
 	lda tmp
 	clc
 	adc tmp+2
@@ -928,10 +950,11 @@ tole
           .)
 
 	.)
-	.)
 
 
 #include "slmem.a65"
+
+	.)
 
 #print sysmem
 #print sysblk

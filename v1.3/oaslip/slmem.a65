@@ -29,13 +29,7 @@
 /* 	balloc, bfree, btrunc, bsplit, brealloc			      */
 /*	getbadr, getblen					      */
 
-#ifndef MAXSLOT
-#define	MAXSLOT		16
-#define	IPBUFFER	256
-sysmem	=$0400
-sysblk	=$4000
-syszp	=$80
-#endif
+/*#define	DEBUGMEM*/
 
 #define	MINBUF	8
 #define	MINMASK	%11111000
@@ -600,7 +594,7 @@ nomerge
 	rts
 	.)
 
-#ifdef DEBUGMEM
+#if 1 /*def DEBUGMEM*/
 &printmem .(
 DB("^m^jMemory Free List:^m^j")
 	lda flist
