@@ -2,6 +2,10 @@
 TODO list for version 1.4
 -------------------------
 
+- make memtask not a subroutine but a 'JMP memtask' saves some stack
+  handling. Add a "pushuser" call to push a return address or a byte 
+  on a task stack.
+ 
 - The memory mangement from the slip driver should be put to the 
   stdio lib and made working for MMU and non-MMU systems
 
@@ -11,6 +15,4 @@ TODO list for version 1.4
 - exec relocator / binary format for relocator
 
 - TCP layer for SLIP
-
-- support for modified RS232 interface on C64 (like miniterm (?))
 

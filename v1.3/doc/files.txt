@@ -11,6 +11,8 @@ stdrom/inirom.a65	inirom sets the memory configuration for testing a
 c64rom.a65		includes/wraparound to build 'ROM' image for C64
 c64def.a65		additional C64 defines
 c64dev.a65		device wraparound
+c64ds.a65		ACIA 6551 RS232 device driver
+c64ds3.a65		Fast RS232 driver for interface by D. Dallmann
 
 /***************** c64 boot files *********************/
 
@@ -54,6 +56,7 @@ oa1/stdio.a65		std library (runs in user space, is not in kernel
 oadev/oa1dct.a65	simple centronics/parallel port device
 oadev/oa1dnl.a65	kind of /dev/null
 oadev/oa1ds.a65		two serial devices for ACIA 6551
+oadev/oa1ds3.a65	one serial device for UART 16550A (16 byte FIFO)
 oadev/oa1dsp.a65	spooler - serialize output requests
 oadev/oa1dt.a65		terminal device - video, keyboard, bell
 oadev/oa1std.a65	standard device routines - for new devices
@@ -96,5 +99,7 @@ mcopy/mcopy.a65		multicopy programm - serialize copy commands
 /***************** basic interpreter ******************/
 
 oabasic/oabasic4.a65	extended basic interpreter, running in multitasking
-			ported from C64, (c) commodore 
+			ported from C64, (c) commodore.
+			Not (yet?) running on the C64 under this OS.
+
 

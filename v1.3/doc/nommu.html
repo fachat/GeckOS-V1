@@ -31,6 +31,11 @@ a task switch is done. But that's a big speed penalty.
 Instead I split the stack into 6 pieces, 5 of them for a task and the
 last one for the system. So on a system without MMU, only five tasks 
 can be running concurrently.
+
+With version 1.3.9 we got a new config option, STACKCOPY. With this option
+the stack of a task is saved in some save area when doing a task switch.
+This is slower, but allows much more stack space in a task and much more
+tasks.
 </p><p>
 There is one other thing that cannot easily be coordinated - the SEND buffer.
 This buffer is used for communication with the kernel. As 

@@ -21,18 +21,14 @@ global options, to be set in stdrom/rom.a65 or c64rom/c64rom.a65:
 
 ROM		mandatory for a rom build. All local options are ignored.
 
-OLDROM		I keep this option to ensure that the actual source 
-		code still produces the last version that has been 
-		tested and run on my selfbuilt computer (which doesn't
-		work currently, so I cannot test it unfortunately).
-
 ROMSTART	Where in CPU memory (with MMU with the upper 4 bits set
 		to zero, i.e. $00000-$0ffff) starts the ROM.
 
 C64		to be defined if a C64 version is to be built.
 		The following options have to be set when doing a C64 build:
 		NOMMU, NOSYSPORT, SHORTLINE. VIDPAGE has to be defined to
-		14, and CLK2MHZ and CMOSCPU has to be undefined.
+		14, and CLK2MHZ and CMOSCPU have to be undefined.
+		NMIDEV has to be defined for the fast RS232 driver.
 </pre><hr><pre>
 
 C64 specific options, to be set in c64rom/c64rom.a65:
@@ -42,9 +38,16 @@ CLEARMEM	if defined, the memory is set to the value CLEARMEM is defined
 C64NEEDCIA1	if defined, disables reading the CIA1 icr in the kernel.
 		Therefore it has to be assured that a device reads this 
 		register to clear the interrupt line again.
+		Undefine this for use with the fast RS232 driver.
+
 C64_BGND_COL
 C64_TEXT_COL
 C64_BORDER_COL	colors to use
+
+C64SWITCH	The terminal switch key, 61= C= key, 4= F1
+
+C64NMIRESET	makes the Restore key a RESET key. Doesn't work with fast
+		serial driver!
 
 </pre><hr><pre>
 
@@ -67,6 +70,13 @@ NOMIRRORMEM	if the memory chip is definitely not mirrored (i.e. no
 		disable the test for this.
 CLK2MHZ		if NOSYSPORT or NOSINPORT, the CPU clock has to be set here
 NMIDEV		enables NMI routine (without MMU only)
+STACKCOPY	If defined in non-MMU systems, save stack area somewhere else
+		when doing a task switch. If a task switch is done, the stack
+		is copied back. If not defined, divide the 6502 stack
+		from $100 to $1ff into pieces, one for each task and one
+		for the system. It's faster without, but with this option
+		there is much more stack space per task and more tasks 
+		are available.
 </pre><hr><pre>
 
 shell options in oash/sh.a65:

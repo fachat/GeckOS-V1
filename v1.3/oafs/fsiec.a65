@@ -573,6 +573,7 @@ lbe       php
 #endif
           plp
           rts
+
 loadirbuf jsr setfpar
           jsr TALK
           jsr SECTALK
@@ -867,7 +868,7 @@ rxe2a     bcs rxe2b
           jsr IECIN
           jsr UNTALK
 #ifdef NMIDEV
-	lda #NMI_OFF
+	lda #NMI_ON
 	jsr CTRLNMI
 #endif
           lda #0
