@@ -4,7 +4,7 @@
     OS/A65 Version 1.3.11
     Multitasking Operating System for 6502 Computers
 
-    Copyright (C) 1989-1996 Andre Fachat 
+    Copyright (C) 1989-1997 Andre Fachat 
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,11 +35,11 @@
 
 #define	PORT	8090
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -47,6 +47,16 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include "fstcp.h"
+#include "oa1fs.h"
+
+
+typedef struct {
+	int	state;
+	int	fd;
+} File;
+
+File files[MAXFILES];
 
 void usage(void) {
 	printf("Usage: fstcp [options] exported_directory\n"
@@ -56,13 +66,29 @@ void usage(void) {
 	exit(1);
 }
 
+void do_cmd(char *buf, int fd) {
+	int tfd, cmd;
+	char retbuf[4];
+
+	cmd = buf[FSP_CMD];
+	tfd = buf[FSP_FD];
+
+	printf("got cmd=%d, fd=%d, name=%s\n",cmd,tfd,buf+FSP_DATA);
+
+	retbuf[FSP_CMD] = FS_REPLY;
+	retbuf[FSP_DATA] = -22;
+	retbuf[FSP_LEN] = 4;
+	retbuf[FSP_FD] = tfd;
+
+	write(fd, retbuf,4);	
+	printf("write %02x %02x %02x %02x\n", retbuf[0], retbuf[1],
+			retbuf[2], retbuf[3]);
+}
+
 int main(int argc, char *argv[]) {
-/*	char text[]="test-string\n";*/
 	int sock, err;
-/*	char *hname;*/
 	struct sockaddr_in serv_addr, client_addr;
 	int client_addr_len;
-/*	struct hostent host, *p;*/
 	int port=PORT;
 	int fd;
 	int i, ro=0;
@@ -88,6 +114,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	dir = argv[i++];
+
+	for(i=0;i<MAXFILES;i++) {
+	  files[i].state = F_FREE;
+	}
 
 	printf("port=%d\n",port);
 	
@@ -121,21 +151,40 @@ int main(int argc, char *argv[]) {
 	  }
 	  if(fork()==0) {
 	    char buf[8192];
+	    int wrp,rdp, plen;
 	    int n;
+
 	    close(sock);
 
 	    printf("ok, got connection to %04lx, port %d\n", 
 			client_addr.sin_addr.s_addr, client_addr.sin_port);
-	    while((n=read(fd, buf, 8192))!=0) {
+
+	    wrp = rdp = 0;
+
+	    while((n=read(fd, buf+wrp, 8192-wrp))!=0) {
+printf("read %d bytes: ",n);
+for(i=0;i<n;i++) printf("%02x ",buf[wrp+i]); printf("\n");
+
 	      if(n<0) {
 		fprintf(stderr,"fstcp: read error %d (%s)\n",errno,strerror(errno));
 		break;
 	      }
-	      for(i=0;i<n;i++) {
-		if(!(i%16)) printf("\n%04x:",i);
-		printf("%02x ",buf[i]);
+	      wrp+=n;
+	      if(wrp==8192 && rdp) {
+		if(rdp!=wrp) {
+		  memmove(buf, buf+rdp, wrp-rdp);
+		}
+		wrp -= rdp;
+		rdp = 0;
 	      }
-	      printf("\n");
+printf("wrp=%d, rdp=%d, FSP_LEN=%d\n",wrp,rdp,FSP_LEN);
+	      if(wrp-rdp > FSP_LEN) {
+		plen = buf[rdp+FSP_LEN];
+printf("wrp-rdp=%d, plen=%d\n",wrp-rdp,plen);
+		if(wrp-rdp <= plen) {
+		  do_cmd(buf+rdp, fd);
+		}
+	      }
 	    }
 	    exit(0);
 	  }
