@@ -1,3 +1,26 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
 
 /**********************************************************************/
 /*                            Shell-Prg                               */
@@ -8,8 +31,9 @@
 /*   NOMON          = kein Monitor                                    */
 /*   NOSH           = keine Shell                                     */
 /*   NOMMU          = sysmem/syszp werden 'durchgereicht'             */
-/*   ROM            = wird fÅr Startrom assembliert                   */
+/*   ROM            = wird fuer Startrom assembliert                  */
 /*   NOPRG          = wird zum laden und testen ohne PRG-Header ass.  */
+/*   SHORTLINE      = if set, 8 bytes per line in hex dump at start   */
 /*                                                                    */
 /*nicht erlaubt sind :                                                */
 /*   NOMON && NOSH                                                    */
@@ -33,6 +57,7 @@
 #endif
 #endif
 
+#ifndef SEROUT
 #define   SEROUT    Putc
 #define   OUT       Fputc
 #define   SERIN     Getc
@@ -42,49 +67,74 @@
 #define   TSERO     Txtout
 #define   HEXOUT    Hexout
 #define   DEZOUT    Dezbout
-
+#endif
           .(
 #ifdef ROM
+
+#ifndef SHDEV
+#define	SHDEV		0
+#endif
+#ifndef MONDEV
+#define	MONDEV		7
+#endif
+#ifndef SHEXE
+#define	SHEXE 		$80
+#endif
+#ifndef MONEXE
+#define	MONEXE		$80
+#endif
+
 #ifndef NOSH
 #ifdef NOMON
           .word PRGEND
 #else
           .word prg1
-#endif
-          .byt  PK_PRG+$80
+#endif /* NOMON */
+          .byt  PK_PRG+SHEXE
           .byt  4
-          .byt  0,0
+          .byt  SHDEV,SHDEV
           .word PRG
 #ifndef ROMTEST
           .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
 #else
           .byt $c,$1c,$d,$1d,$e,$1e,<-1
-#endif
+#endif /* ROMTEST */
+
+#ifndef SH2
           .byt  "shell",0,"shell b c:auto.bat",0
-#endif
+#define	SH2
+#else
+          .byt  "shell2",0,"shell2",0
+#endif	/* SH2 */
+
+#endif /* NOSH */
+
+/*------------------------------------------------------------------------*/
+
 #ifndef NOMON
 prg1      .word PRGEND
-#ifdef NOSH
-          .byt  PK_PRG+$80
-          .byt  4,0,0
-#else
-#ifdef NOMMU
-          .byt  PK_PRG
-          .byt  4,7,7
-#else
-          .byt  PK_PRG+$80
-          .byt  4,7,7
-#endif
-#endif
+
+          .byt  PK_PRG+MONEXE
+          .byt  4,MONDEV,MONDEV		/* STD* to device 0 (video1?) */
+
           .word PRG
 #ifndef ROMTEST
           .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
 #else
           .byt $c,$1c,$d,$1d,$e,$1e,<-1
 #endif
+
+#ifndef MON2
           .byt  "mon",0,"mon",0
-#endif
+#define	MON2
 #else
+          .byt  "mon2",0,"mon2",0
+#endif /* MON2 */
+#endif /* NOMON */
+
+#else /* ROM */
+
+/*------------------------------------------------------------------------*/
 
 #include  "oa1str.def"
 #include  "oa1sj.a65"
@@ -103,9 +153,11 @@ prg1      .word PRGEND
           .word $800
           *=$800
 
-#endif
+#endif /* NOPRG */
 
-#endif
+#endif /* ROM */
+
+/*------------------------------------------------------------------------*/
 
 #ifndef NOMMU
 
@@ -120,10 +172,12 @@ sysmem    =$300
 
 /**********************************************************************/
 
+#ifndef VSA
 #define   MAXLEN    82
 #define   VSA       1
 #define   VSB       3
 #define   INDEPTH   8
+#endif
 
 LZEI      =sysmem
 IOBUF     =sysmem+1
@@ -154,9 +208,13 @@ bef       =sysmem
           lda #<metxt
           ldy #>metxt
           jsr TSERO
+#ifndef NOMMU
           jsr copycmd
           bcs p2
           bcc p1
+#else
+	  jmp p2
+#endif
 
 ploop     lda #<metxt
           ldy #>metxt
@@ -266,7 +324,11 @@ befadr    .word DIRECTORY-1,TYPE-1,DELETE-1,FORMAT-1,CHKDSK-1
 
 initxt    .asc "^M^JSHELL V"
           .byt VSA+"0",".",VSB+"0"
+#ifdef OLDROM
           .asc "^M^J(C) 1990 BY A.FACHAT^M^J^@"
+#else
+          .asc "^M^J(C) 1990-96 BY A.FACHAT^M^J^@"
+#endif
 errtxt    .asc " ?^M^J^@"
 metxt     .asc "^M^J"
           .byt MESSAGE,0
@@ -292,7 +354,13 @@ i0        lda it,y
           iny
           bne i0
           
-info      jsr GETINFO
+info      .(
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#endif
+	  jsr GETINFO
           ldx #0
           stx cnt
 infoloop  lda cnt
@@ -359,8 +427,14 @@ i5        lda st,x
           cmp #ANZ_ENV
           bcs ie
           jmp infoloop
-ie        clc
+ie        
+#ifdef NOMMU
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+#endif
+	  clc
           rts
+	  .)
           
 st        .asc "FRE ENV IBRKBRK RDY IRQ WFRXWFTXWSEMWTRM"
 it        .asc "^M^JNr Name     Stat kB In OutErr^M^J",0
@@ -441,8 +515,8 @@ div       =sysmem
 Z0        =sysmem+1
 -sysmem   +=3
 
-+CHRGET   inc LZEI
-+CHRGOT   sty div
+&CHRGET   inc LZEI
+&CHRGOT   sty div
           ldy LZEI
           LDA IOBUF,Y
           LDY div
@@ -451,7 +525,7 @@ Z0        =sysmem+1
           CMP #0
           RTS
 
-+GETADR   LDY LZEI:LDA #0:STA Z0:STA Z0+1
+&GETADR   LDY LZEI:LDA #0:STA Z0:STA Z0+1
 GA1       LDA IOBUF,Y:bne get
           jmp GAE
 get       INY
@@ -564,7 +638,7 @@ thok      clc
           rts
           .)
 
-+MLINEIN  .(
+&MLINEIN  .(
 #ifndef NOSH
 li1       =sysmem
 -sysmem   +=1
@@ -618,6 +692,7 @@ MO2       CLC
           sta LZEI
           RTS
           .)
+#ifndef NOMMU
 #ifndef NOSH
 &copycmd  .(
           ldx #<-1
@@ -672,6 +747,7 @@ cc2b      inx
 cce       sec
           rts
           .)
+#endif
 #endif
           .)
 #ifndef NOSH

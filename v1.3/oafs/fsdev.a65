@@ -1,3 +1,26 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
 
           .(
 #ifdef ROM
@@ -24,10 +47,20 @@
 
 #endif
 
+#include  "oafs/fsdef.a65"
+
+#ifndef NOMMU
 #define   MAXFILE   8
+#else
+#define	  MAXFILE   4		/* must be more than ANZDRV (number of
+				   drives), because for each drive a buffer
+				   is reserved */
+#endif
+
 #define   BUFSIZE   128
 #define   ANZDRV    2
 
+#if 0
 #define   F_FL      0         /* fnr+secadr =pos in tab     */
 #define   F_DEV     1         /* dev-nummer in devtab       */
 #define   F_DRV     2         /* unused                     */
@@ -43,6 +76,10 @@
 #define   F_FL_FRE  255
 #define   F_MODE_RD 0
 #define   F_MODE_WR 1
+#endif
+#ifdef OLDROM
+#define   F_FL_EOF  128
+#endif
 
 #ifndef NOMMU
 -syszp    =$40
@@ -90,6 +127,11 @@ p1        jsr setzei
           cpx #MAXFILE
           bcc p1
 
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#endif
           lda #ANZDRV         ; 2 Drives
           sta PCBUF+FM_REG_DRVS
           lda owntask
@@ -98,6 +140,12 @@ p1        jsr setzei
           ldx #SEND_FM   
           ldy #2
           jsr SEND
+#ifdef NOMMU
+	  php
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  plp
+#endif
           bcc loopt
           jmp TERM
 
@@ -307,7 +355,13 @@ loadbuf   .(
           bpl ldr0
           jmp loadirnam
 
-ldr0      ldy #F_DRV
+ldr0      
+#ifdef NOMMU
+	clc
+	ldx #SEM_SENDBUF
+	jsr PSEM
+#endif
+	  ldy #F_DRV
           lda (fzei),y
           beq lddev
 
@@ -315,7 +369,6 @@ ldr0      ldy #F_DRV
           lda (fzei),y
           jsr setrzei
           bcs lde             ; rzei zeigt auf verkettungszeiger
-
           ldy #P_TAB
 ldr3      iny                 ; deshalb hier zwei mehr
           iny
@@ -344,6 +397,14 @@ ld1       lda PCBUF,x
           cmp #0
           bne ld1
           tya
+
+#ifdef NOMMU
+	pha
+	ldx #SEM_SENDBUF
+	jsr VSEM
+	pla
+#endif
+
           ldy #F_LEN
           sta (fzei),y
           lda #0
@@ -362,7 +423,12 @@ ld2       sta (bzei),y
           clc
           rts
 
-lde       ldy #0
+lde   
+#ifdef NOMMU
+	ldx #SEM_SENDBUF
+	jsr VSEM
+#endif
+    	  ldy #0
 lde1      lda ldet,y
           sta (bzei),y
           iny
@@ -476,8 +542,8 @@ sz1       rts
 
 setrzei   .(
           sta cmd
-          ldx #<PRGSTART
-          lda #>PRGSTART
+          ldx #<ROMSTART
+          lda #>ROMSTART
 ldr1      stx rzei
           sta rzei+1
           ldy #1
@@ -501,8 +567,8 @@ lde       rts
           .)
 
 findrnam  .(
-          lda #<PRGSTART
-          ldx #>PRGSTART
+          lda #<ROMSTART
+          ldx #>ROMSTART
 fn1       sta rzei
           stx rzei+1
           ldy #1
@@ -570,6 +636,14 @@ lre       tya
 #if sysblk<sysmem
 #echo zu wenig Speicher !
 #endif
+
+#undef ANZDRV
+#undef BUFSIZE
+#undef MAXFILE
+#ifdef OLDROM
+#define   F_FL_EOF  2
+#endif
+
 
 ende      .)
 

@@ -71,25 +71,31 @@
 
 #endif
 #endif          
-
-#include  "oafs/fsdef.a65"
-
-#undef ANZDRV          
-#define   ANZDRV    2
-#ifdef C64
-#undef ANZDRV
-#define	  ANZDRV    4
-#endif
-
-#ifdef OLDROM
-#define   IECBUF    $100		/* only for MMU! */
-#endif
-
+          
+#define   IECBUF    $100
 #define   MAXLEN    64
 
 #define   MAXFILE   6
 #define   BUFSIZE   128
+#define   ANZDRV    2
 
+#define   F_FL      0         ; fnr+secadr =pos in tab
+#define   F_DEV     1
+#define   F_DRV     2
+#define   F_STR     3
+#define   F_LEN     4         ; anzahl Byte in Puffer
+#define   F_BYT     5         ; aktuelles Byte
+#define   F_MODE    6         ; 0=read,1=write
+#define   F_SLEN    8
+
+#define   F_FL_OK   0
+#define   F_FL_DIR  1
+#define   F_FL_EOF  2
+#define   F_FL_DO   3
+#define   F_FL_DOX  4
+#define   F_FL_FRE  255
+#define   F_MODE_RD 0
+#define   F_MODE_WR 1
 
 #define   FT_MOD         0
 #define   FT_STR         1
@@ -120,11 +126,6 @@
 
 -sysblk   -=MAXFILE*BUFSIZE
 
-#ifndef OLDROM
-IECBUF	  =sysmem
--sysmem   +=MAXLEN
-#endif
-
 fzei      =syszp
 bzei      =syszp+2
 
@@ -154,20 +155,7 @@ PRG       .(
           sta showcnt
 #endif
 
-#ifndef OLDROM			/* get the resource (interface) */
-	  sec
-#ifdef PARALLEL
-	  ldx #SEM_PARIEC
-#else
-	  ldx #SEM_SERIEC
-#endif
-	  jsr PSEM
-	  bcc sem_ok
-	  jmp TERM
-sem_ok
-#endif
-
-          jsr IECINIT		/* init interface */
+          jsr IECINIT
           bcs term
 
 #ifndef NOLOOP
@@ -189,11 +177,6 @@ p1        jsr setzei
           bcc p1
 
 #ifndef NOFS
-#ifdef NOMMU
-	  clc
-	  ldx #SEM_SENDBUF
-	  jsr PSEM
-#endif
           lda #ANZDRV         ; 2 Drives
           sta PCBUF+FM_REG_DRVS
           lda owntask
@@ -202,12 +185,6 @@ p1        jsr setzei
           ldx #SEND_FM   
           ldy #2
           jsr SEND
-#ifdef NOMMU
-	  php
-	  ldx #SEM_SENDBUF
-	  jsr VSEM
-	  plp
-#endif
           bcs term
 #endif
 
@@ -219,20 +196,9 @@ x1        jsr fragti
           dex
           bne x0
           .)
-
+          
           jmp loop
-term      
-#ifndef OLDROM
-	  pha
-#ifdef PARALLEL
-	  ldx #SEM_PARIEC
-#else
-	  ldx #SEM_SERIEC
-#endif
-	  jsr VSEM
-	  pla
-#endif
-	  jmp TERM
+term      jmp TERM
 
 
           .(
@@ -326,26 +292,17 @@ sd1       lda $300,y
 
 loop      
 #ifndef NOLOOP
-          jsr INLOOP		; check for ATN on bus 
+          jsr INLOOP
 #endif
           jsr SUSPEND
 #ifdef NOFS
           jmp loop
 #else
-#ifndef OLDROM
-	  lda anz		; check if we have open files
-	  bne l1xxx		; if no then
-	  sec			; block while trying to RECEIVE
-	  .byt $24
-l1xxx
-#endif
           clc
-          jsr RECEIVE		; check for fs command
+          jsr RECEIVE
           bcs l1
           jsr rxmess
-l1        
-	  ; check all open streams and read/write new data if needed
-	  ldx #0
+l1        ldx #0
           stx anz
           stx cnt
 l2        jsr setzei
@@ -749,20 +706,6 @@ rx1aa     lda PCBUF+FS_OPEN_PFAD
           ldy #F_STR
           sta (fzei),y
 
-#ifndef OLDROM
-	.(
-	; remove leading DIRSIGN, as all names are assumed global
-	lda PCBUF+FS_OPEN_NAME
-	cmp #DIRSIGN
-	bne noglobal
-	ldy #<-1
-l0	iny
-	lda PCBUF+FS_OPEN_NAME+1,y
-	sta PCBUF+FS_OPEN_NAME,y
-	bne l0
-noglobal
-	.)
-#endif
           lda PCBUF+FS_OPEN_NAME
           bne xx1a
           sta PCBUF+FS_OPEN_NAME+1
@@ -988,19 +931,8 @@ sfn3      lda #","
           pla
           sta PCBUF+FS_OPEN_NAME,y
           iny
-#ifdef OLDROM
           tya
           ldx #<PCBUF+FS_OPEN_NAME
-#else
-	  ldx #<PCBUF+FS_OPEN_NAME
-	  lda PCBUF+FS_OPEN_NAME
-	  cmp #DIRSIGN
-	  bne sfnn
-	  dey
-	  inx
-sfnn
-	  tya
-#endif
           ldy #>PCBUF+FS_OPEN_NAME
           jmp SETFNPAR
           .)
@@ -1129,11 +1061,9 @@ status    =sysmem+3
 &&IECOPEN  lda #0
           sta status
           jsr LISTEN
-;lda status:;sta $e000
           lda secadr
           ora #$f0
           jsr seclisten
-;lda status:;sta $e001
           lda status
           bmi opend
           lda namlen
@@ -1154,8 +1084,6 @@ op1       lda (namzei),y
           jsr CRLFOUT
 #endif
 nonam     jsr UNLISTEN
-
-;inc $d020
           clc
           rts
 opend     lda #E_NODEV
@@ -1178,27 +1106,13 @@ lx1       lda status
           .byt $24
 lx        sec
           php
-;tya
-;pha 
-;ldy #0    
-;lxxx0
-;jsr IECIN
-;sta $e000,y
-;iny
-;lda status
-;beq lxxx0
-;pla
-;tay 
           jsr UNTALK
           plp
           rts
           .)
 #endif
 
-/* Blocklevel 2 */
-#ifndef C64 /*--------------------------------------------------------------*/
-
-#ifdef PARALLEL /*----------------------------------------------------------*/
+/* Blocktiefe 2 */
 
 #define   VIA1      $e840
 #define   PIA1      $e820
@@ -1521,15 +1435,6 @@ il        ldy bufpos
           lda #0
           ldy bufpos
           sta INBUF,y
-				; get SENDBUF and try to execute command.
-				; locks if request from outside ends here and
-				; request from inside has locked SENDBUF
-				; and fsiec is supposed to serve...!
-#ifdef NOMMU
-	  clc
-	  ldx #SEM_SENDBUF
-	  jsr PSEM
-#endif
           lda secadr
           and #15
           cmp #15
@@ -1539,20 +1444,10 @@ il        ldy bufpos
           cmp #$f0
           bne cmd2
           jsr open
-#ifdef NOMMU
-          jmp RetLoop	
-#else
-	  jmp RETLOOP
-#endif
-cmd2      jsr sendcmd    ; cmd ausfÅhren
-RetLoop	
-#ifdef NOMMU
-	  ldx #SEM_SENDBUF
-	  jsr VSEM
-#endif
           jmp RETLOOP
-         
- 
+cmd2      jsr sendcmd    ; cmd ausfÅhren
+          jmp RETLOOP
+          
 iclose    lda secadr
           and #15
           sta filenr
@@ -3327,1205 +3222,6 @@ frageoi   lda VIA1+VIA_DRB
 
           .)
 
-#else /* PARALLEL ---------------------------------------------------------*/
-
-#define   VIA1      $e840
-
-cnt2      =syszp
-byte      =syszp+1
-bytfl     =syszp+2
-eoifl     =syszp+3
-
--syszp    +=4
-
-+TALK     lda devadr
-          jmp talk
-+LISTEN   lda devadr
-          jmp listen
-+SECTALK  lda secadr
-          ora #$60
-          jmp sectalk
-+SECLISTEN lda secadr
-          ora #$60
-          jmp seclisten
-
-+IECINIT  lda #%00101110
-          sta VIA1+VIA_DDRA
-          cmp VIA1+VIA_DDRA
-          bne inix
-          lda #0
-          sta VIA1+VIA_DRA
-          lda VIA1+VIA_PCR
-          and #%11110000
-          ora #%00000001
-          sta VIA1+VIA_PCR
-          lda VIA1+VIA_ACR
-          and #%00111110
-          sta VIA1+VIA_ACR
-          lda #%01000011
-          sta VIA1+VIA_IER
-
-          lda #0
-          sta status
-          sta cnt2
-          sta bytfl
-          sta eoifl
-          clc
-          rts
-inix      sec
-          rts
-
-iecin     
-          sei
-          lda #0
-          sta eoifl
-          lda #8
-          sta cnt2
-          jsr clkhi
-          jsr datalo
-
-l14       ;    jsr testatn
-          ;    bcs atnin
-          lda VIA1+VIA_DRA    ; wait clkhi
-          cmp VIA1+VIA_DRA
-          bne l14
-          and #$40
-          beq l14 
-
-l19       jsr setti      
-          jsr datahi
-
-l16       jsr fragti
-          bne l15   ; abgelaufen
-          ;    jsr testatn
-          ;    bcs atnin
-          bit VIA1+VIA_DRA    ; wait clklo
-          bvs l16
-          bvc l17
-
-l15       lda eoifl
-          beq l18
-          lda #2
-          jmp error
-l18       dec eoifl
-          jsr datalo
-          jsr waitus
-          lda #$40
-          jsr seterror
-          bne l19
-
-l17   
-l20       lda VIA1+VIA_DRA
-          asl
-          bpl l20
-          lsr
-          lsr
-          ror byte
-
-l21       bit VIA1+VIA_DRA
-          bvs l21
-
-          dec cnt2
-          bne l20
-
-          jsr datalo
-
-          bit status
-          bvc l22
-          jsr endhndshk
-          lda byte
-          sec
-          rts
-
-l22       lda byte
-          clc
-          rts
-          
-/*
-atnin     jsr datalo
-          jsr clkhi
-          sec
-          rts
-*/
-nodev     lda #$80
-error     jsr seterror
-          jsr atnhi
-endhndshk jsr waitus
-          jsr datahi
-          jsr clkhi
-          sec
-          rts
-
-atnout    
-          pha
-          bit bytfl
-          bpl l1         ; noch ein byte zu senden
-
-          sec
-          ror cnt2        ; dann mit eoi senden
-          jsr iecout
-          lsr bytfl      ; flags ruecksetzen
-
-l1        pla
-          sta byte
-          
-          jsr datahi
-          jsr atnlo
-+iec2out  jsr clklo
-          jsr datahi
-          jsr waitms
-+iecout   sei 
-          jsr datahi
-
-l0        lda VIA1+VIA_DRA
-          cmp VIA1+VIA_DRA
-          bne l0
-          lsr                 ; data in c
-          bcs nodev
-
-          jsr clkhi
-          bit cnt2
-          bpl l3    
-                              ; eoi senden
-l4        ;    jsr testatn
-          ;    bcs atnin
-          lda VIA1+VIA_DRA    ; wait data hi
-          cmp VIA1+VIA_DRA
-          bne l4
-          lsr
-          bcc l4
-
-l5        ;    jsr testatn
-          ;    bcs atnin
-          lda VIA1+VIA_DRA    ; wait data lo
-          cmp VIA1+VIA_DRA
-          bne l5
-          lsr
-          bcs l5
-
-l3        ;    jsr testatn
-          ;    bcs atnin
-          lda VIA1+VIA_DRA    ; wait data hi
-          cmp VIA1+VIA_DRA
-          bne l3
-          lsr
-          bcc l3
-
-          jsr clklo
-          lda #8
-          sta cnt2
-
-l6        lda VIA1+VIA_DRA
-          cmp VIA1+VIA_DRA
-          bne l6
-          lsr
-          bcc timexout
-
-          ror byte            ; bit setzen
-          bcs l7
-          jsr datalo
-          bne l8
-l7        jsr datahi
-
-l8        jsr clkhi
-          jsr waitus
-
-          jsr dhiclo
-
-          dec cnt2
-          bne l6
-
-          jsr waitdlo
-          bcs timeout
-          rts
-timeout   lda #3
-          .byt $2c
-timexout  lda #4
-          jmp error
-          
-/*
-testatn   .(
-          lda VIA1+VIA_DRA
-          bmi tstatn
-          and #%00100000
-          beq c
-s         sec
-          rts
-tstatn    and #%00100000
-          beq s
-c         clc
-          rts
-          .)
-*/
-clklo     lda VIA1+VIA_DRA
-          ora #%00000100
-          sta VIA1+VIA_DRA
-          rts
-clkhi     lda VIA1+VIA_DRA
-          and #%11111011
-          sta VIA1+VIA_DRA
-          rts
-datalo    lda VIA1+VIA_DRA
-          ora #%00000010
-          sta VIA1+VIA_DRA
-          rts
-datahi    lda VIA1+VIA_DRA
-          and #%11111101
-          sta VIA1+VIA_DRA
-          rts
-atnlo     lda VIA1+VIA_DRA
-          ora #%00101000
-          sta VIA1+VIA_DRA
-          rts
-atnhi     lda VIA1+VIA_DRA
-          and #%11010111
-          sta VIA1+VIA_DRA
-          rts
-atnalo    lda VIA1+VIA_DRA
-          and #%11011111
-          sta VIA1+VIA_DRA
-          rts
-atnahi    lda VIA1+VIA_DRA
-          ora #%00100000
-          sta VIA1+VIA_DRA
-          rts
-dhiclo    lda VIA1+VIA_DRA
-          and #%11111101
-          ora #%00000100
-          sta VIA1+VIA_DRA
-          rts
-
-
-seterror  ora status
-          sta status
-          rts
-
-waitdlo   
-          jsr setti
-w1        jsr fragti
-          bne w2
-          lda VIA1+VIA_DRA
-          cmp VIA1+VIA_DRA
-          bne w1
-          lsr
-          bcs w1
-          rts
-w2        sec
-          rts
-
-&setti     lda #<1000
-          sta VIA1+VIA_T1CL
-          lda #>1000     
-          sta VIA1+VIA_T1CH
-          rts
-&fragti    lda VIA1+VIA_IFR
-          and #%01000000
-          rts
-
-waitms    txa
-          ldx #$b6
-          bne w4
-waitus    txa
-          ldx #8
-w4        dex
-          bne w4
-          tax
-          rts
-
-+IECIN    sei
-          jsr iecin
-          cli
-          rts
-
-+IECOUT    
-          sei
-          pha
-          clc
-          bit bytfl
-          bmi iout
-          sec
-          ror bytfl
-          bne endout
-
-iout      jsr iecout
-          
-endout    pla
-          sta byte
-          cli
-          rts
-          
-
-talk      ora #$40
-          .byt $2c
-listen    ora #$20
-          sei
-          jsr atnout
-          cli
-          rts
-
-sectalk
-          sei
-          sta byte
-          jsr iec2out
-          bcs st1
-          jsr datalo
-          jsr atnhi
-          jsr clkhi
-st2       bit VIA1+VIA_DRA
-          bvs st2
-st1       cli
-          rts
-          
-
-seclisten sei
-          sta byte
-          jsr iec2out
-          jsr atnhi
-          cli
-          rts
-
-+UNTALK    sei
-          jsr clklo
-          lda #$5f
-          jsr atnout
-          jsr atnhi
-          jsr clkhi
-          jsr datahi
-          cli
-          rts
-
-+UNLISTEN  lda #$3f
-          sei
-          jsr atnout
-          jsr atnhi
-          jsr clkhi
-          cli
-          rts
-
-          
-          .)
-/*ende      .)*/
-#endif /* PARALLEL --------------------------------------------------------*/
-
-#else /* C64 --------------------------------------------------------------*/
-
-#ifdef PARALLEL /* C64 IEEE488 interface ----------------------------------*/
-
-#define   TPI       $df00
-#define   CIA2      $dd00
-
-byte      =sysmem
-errfl     =sysmem+1
-eoifl     =sysmem+2
--sysmem   +=3
-
-&IECINIT  .(
-	  ; the following lines are from the original code 
-	  lda #%00011100
-	  sta TPI+TPI_DDPC
-	  cmp TPI+TPI_DDPC
-	  bne inix
-	  lda #0
-	  sta TPI+TPI_PC
-
-	  sta TPI+TPI_DDPB
-	  cmp TPI+TPI_DDPB
-	  bne inix
-
-	  lda #%00111010
-	  sta TPI+TPI_PA
-	  lda #%00111111
-	  sta TPI+TPI_DDPA
-	  cmp TPI+TPI_DDPA
-	  bne inix
-
-	  lda TPI+TPI_PC
-	  and #%11111110
-	  sta TPI+TPI_PC
-	  ldy #255
-l0	  dey
-	  nop
-	  bne l0
-	  lda TPI+TPI_PC
-	  ora #1
-	  sta TPI+TPI_PC
-
-	  lda #%00111001
-	  sta TPI+TPI_PA
-
-          lda #0
-          sta byte
-          sta errfl
-          sta eoifl
-          clc
-          rts
-inix      sec
-          rts
-          .)
-
-/* Blocktiefe 2 */
-
-&TALK     lda devadr
-          ora #$40
-          bne aout
-&LISTEN   lda devadr
-          ora #$20
-aout      
-	  pha
-	  jsr iecsetoutput
-          lda #0
-          sta status
-;          jsr nrfdhi
-;          jsr ndachi
-;jsr eoilo         
-
-          lda errfl
-          beq oo1
-          sec
-          ror eoifl
-          jsr iecout
-          lda #0
-          sta errfl
-;jsr eoihi
-
-oo1       
-	  pla
-          sta byte
-          jsr waitdavhi
-          jsr atnlo
-
-iecout    .(
-          sei
-;          jsr davhi
-lda #%00010010
-ora TPI+TPI_PA
-sta TPI+TPI_PA
-;          jsr iecsetoutput
-          jsr tstdev     ;nrfdhi & ndachi = z
-          beq devnotpr
-          lda byte
-          jsr out
-ox1       JSR setti
-ox1a      JSR fragti
-          BNE XTO
-          ;lda VIA1+VIA_DRB
-	  lda TPI+TPI_PA
-          bpl ox1a       ; wait nrfd hi
-          lda eoifl
-          bpl o0
-          jsr eoilo
-o0        jsr davlo
-          jsr setti
-o1        jsr fragti
-          bne timeout
-          jsr fragndac   ; wait ndac hi
-          bcc o1
-          jsr davhi
-          jsr eoihi
-          lsr eoifl
-          jsr clrdata    ; alle data hi
-ox2       ;lda VIA1+VIA_DRB
-	  lda TPI+TPI_PA
-          ;lsr
-          ;bcs ox2        ; wait ndaclo
-	  asl
-	  bmi ox2
-          clc
-          cli
-          rts
-          
-XTO       JSR SUSPEND
-          SEI
-          JMP ox1
-          .)
-          
-+SECLISTEN lda secadr
-          ora #$60
-&seclisten sta byte
-          jsr iecout
-          jsr atnhi
-          cli
-          rts
-
-timeout   lda #1
-          .byt $2c
-devnotpr  lda #128
-          jsr seterr
-          jsr eoihi
-          jsr davhi
-          jsr ndachi
-          sec
-          cli
-          rts
-          
-+SECTALK  lda secadr
-          ora #$60
-&sectalk   sta byte
-          jsr iecout
-;          jsr nrfdlo
-;          jsr ndaclo    
-;          jsr atnhi
-;	  jsr iecsetinput
-sectalkend
-lda #%00111101
-and TPI+TPI_PA
-sta TPI+TPI_PA
-lda #%11000011
-sta TPI+TPI_DDPA
-lda #0
-sta TPI+TPI_DDPB
-jmp atnhi
-          rts
-
-+IECOUT   bit errfl
-          bmi oo2
-          dec errfl
-          clc
-          bne oo3
-oo2       pha
-          jsr iecout
-          pla
-oo3       sta byte
-          lda status
-          cmp #1         ; ungleich 0 = c
-          rts
-
-&UNTALK   jsr atnlo
-          lda #95
-          .byt $2c
-&UNLISTEN lda #63
-          jsr aout
-;          jsr atnhi
-jsr sectalkend
-lda #%11111101
-ora TPI+TPI_PA
-sta TPI+TPI_PA
-          cli
-          rts
-          
-timeoutx  jmp timeout
-
-&IECIN    .(
-          sei
-          jsr ndaclo
-          jsr nrfdhi
-i1        ;lda VIA1+VIA_DRB
-          ;cmp VIA1+VIA_DRB
-	  lda TPI+TPI_PA
-	  cmp TPI+TPI_PA
-          bne i1
-          asl
-          bcc i1		; wait nrfd hi
-          jsr setti
-o11       jsr fragti
-          bne timeoutx    ; c= abgelaufen
-          jsr fragdav    ; wait dav lo
-          bcs o11
-          jsr nrfdlo
-          jsr frageoi
-          bcs o12
-          lda #64
-          jsr seterr
-o12       jsr bytin
-          pha
-          jsr ndachi
-o12a      jsr fragdav
-          bcc o12a 
-          jsr ndaclo
-          lda status
-          bne o12c
-          pla
-          clc
-          cli
-          rts
-o12c      pla
-          sec
-          cli
-          rts
-          .)
-
-iecsetinput 
-	  lda TPI+TPI_PA
-	  and #%00111101	;61
-	  sta TPI+TPI_PA
-	  lda #%11000011	;195
-	  sta TPI+TPI_DDPA
-	  lda #0
-	  sta TPI+TPI_DDPB
-	  rts
-	
-iecsetoutput
-	  lda #%00111011
-	  sta TPI+TPI_DDPA
-	  lda #$ff
-	  sta TPI+TPI_PB
-	  sta TPI+TPI_DDPB
-	  lda #%11111010	; ?
-	  sta TPI+TPI_PA	; ?
-	  rts
-
-atnhi     lda TPI+TPI_PA
-          ora #%00001000
-          sta TPI+TPI_PA
-          rts
-atnlo     lda TPI+TPI_PA
-          and #%11110111
-          sta TPI+TPI_PA
-          rts
-
-eoihi     lda TPI+TPI_PA
-          ora #%00100000
-          sta TPI+TPI_PA
-          rts
-eoilo     lda TPI+TPI_PA
-          and #%11011111
-          sta TPI+TPI_PA
-          rts
-
-ndachi    lda TPI+TPI_PA
-          ora #%01000000
-          sta TPI+TPI_PA
-          rts
-ndaclo    lda TPI+TPI_PA
-          and #%10111111
-          sta TPI+TPI_PA
-          rts
-
-nrfdhi    lda TPI+TPI_PA
-          ora #%10000000
-          sta TPI+TPI_PA
-          rts
-nrfdlo    lda TPI+TPI_PA
-          and #%01111111
-          sta TPI+TPI_PA
-          rts
-
-davhi     lda TPI+TPI_PA
-          ora #%00010000
-          sta TPI+TPI_PA
-          rts
-davlo     lda TPI+TPI_PA
-          and #%11101111
-          sta TPI+TPI_PA
-          rts
-
-waitdavhi lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne waitdavhi
-          and #%00010000
-          beq waitdavhi
-          rts
-
-tstdev    lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne tstdev
-          and #%11000000
-          cmp #%11000000
-          rts
-
-clrdata   lda #<-1
-          sta TPI+TPI_PB
-          rts
-
-out       eor #$ff
-          sta TPI+TPI_PB
-          rts
-
-waitnrfdhi
-          lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne waitnrfdhi
-          asl
-          bcc waitnrfdhi
-          rts
-
-fragndac  lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne fragndac
-          ;lsr
-	  asl
-	  asl
-          rts
-
-fragdav   lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne fragdav
-          asl
-          asl
-          asl
-          asl
-          rts
-
-seterr    ora status
-          sta status
-          rts
-
-bytin     lda TPI+TPI_PB
-          eor #$ff
-          rts
-
-&setti    lda CIA2+CIA_CRB
-	  and #%11111110
-	  sta CIA2+CIA_CRB
-	  lda #<65000
-          ;sta VIA1+VIA_T1CL
-	  sta CIA2+CIA_TBL
-          lda #>65000     
-          ;sta VIA1+VIA_T1CH
-	  sta CIA2+CIA_TBH
-	  lda CIA2+CIA_ICR	; clear overflow flag
-	  lda #%00010001
-	  sta CIA2+CIA_CRB
-          rts
-	
-&fragti   lda CIA2+CIA_ICR
-          and #%00000010
-          rts
-
-frageoi   lda TPI+TPI_PA
-          cmp TPI+TPI_PA
-          bne frageoi
-          asl
-          asl
-          asl
-          rts
-
-          .)
-
-#else /* PARALLEL ---------------------------------------------------------*/
-
-#define   CIA2      $dd00
-
-cnt2      =syszp
-byte      =syszp+1
-bytfl     =syszp+2
-eoifl     =syszp+3
-
--syszp    +=4
-
-+TALK     lda devadr
-          jmp talk
-+LISTEN   lda devadr
-          jmp listen
-+SECTALK  lda secadr
-          ora #$60
-          jmp sectalk
-+SECLISTEN lda secadr
-          ora #$60
-          jmp seclisten
-
-+IECINIT  
-	  /* init i/o */
-
-	  lda CIA2+CIA_DDRA
-	  and #%00111111
-	  ora #%00111000
-	  sta CIA2+CIA_DDRA
-	  lda CIA2+CIA_PRA
-	  and #%11000111
-	  sta CIA2+CIA_PRA
-
-	  /* init timer (CIA2, timer b) one shot mode */
-
-	  lda %00000010
-	  sta CIA2+CIA_ICR	; clean timer b irq mask
-
-/*
-          lda #0
-          sta VIA1+VIA_DRA
-          lda VIA1+VIA_PCR
-          and #%11110000
-          ora #%00000001
-          sta VIA1+VIA_PCR
-          lda VIA1+VIA_ACR
-          and #%00111110
-          sta VIA1+VIA_ACR
-          lda #%01000011
-          sta VIA1+VIA_IER
-*/
-
-          lda #0
-          sta status
-          sta cnt2
-          sta bytfl
-          sta eoifl
-          clc
-          rts
-inix      sec
-          rts
-
-iecin     
-          sei
-          lda #0
-          sta eoifl
-          lda #8
-          sta cnt2
-          jsr clkhi
-;          jsr datalo
-
-l14       ;    jsr testatn
-          ;    bcs atnin
-          ;lda VIA1+VIA_DRA    ; wait clkhi
-          ;cmp VIA1+VIA_DRA
-	  lda CIA2+CIA_PRA
-	  cmp CIA2+CIA_PRA
-          bne l14
-          and #$40
-          beq l14 
-
-l19       jsr setti      
-          jsr datahi
-
-l16       jsr fragti
-          bne l15   ; abgelaufen
-          ;    jsr testatn
-          ;    bcs atnin
-	  ;    bit VIA1+VIA_DRA    ; wait clklo
-	  bit CIA2+CIA_PRA
-          bvs l16
-          bvc l17
-
-l15       lda eoifl
-          beq l18
-          lda #2
-          jmp error
-l18       dec eoifl
-          jsr datalo
-jsr clkhi
-          jsr waitus
-          lda #$40
-          jsr seterror
-          bne l19
-
-l17   
-l20       ;lda VIA1+VIA_DRA
-	  lda CIA2+CIA_PRA
-          asl
-          bpl l20
-          ;lsr
-          ;lsr
-          ror byte
-
-l21       ;bit VIA1+VIA_DRA
-	  bit CIA2+CIA_PRA
-          bvs l21
-
-          dec cnt2
-          bne l20
-
-          jsr datalo
-
-          bit status
-          bvc l22
-          jsr endhndshk
-          lda byte
-          sec
-          rts
-
-l22       lda byte
-          clc
-          rts
-          
-/*
-atnin     jsr datalo
-          jsr clkhi
-          sec
-          rts
-*/
-nodev     lda #$80
-inc $d020
-error     jsr seterror
-          jsr atnhi
-endhndshk jsr waitus
-;          jsr datahi
-          jsr clkhi
-jsr datahi
-          sec
-          rts
-
-atnout    
-          pha
-          bit bytfl
-          bpl l1         ; noch ein byte zu senden
-
-          sec
-          ror cnt2        ; dann mit eoi senden
-          jsr iecout
-          lsr bytfl      ; flags ruecksetzen
-
-l1        pla
-          sta byte
-          
-          jsr datahi
-cmp #$3f
-bne l1xxx
-jsr clkhi
-l1xxx
-          jsr atnlo
-+iec2out  jsr clklo
-          jsr datahi
-          jsr waitms
-+iecout   sei 
-          jsr datahi
-
-l0
-;	  lda CIA2+CIA_PRA
-;	  cmp CIA2+CIA_PRA
-;          bne l0
-;	  asl
-jsr checkin
-          bcs nodev
-
-          jsr clkhi
-          bit cnt2
-          bpl l3    
-                              ; eoi senden
-l4
-;	  lda CIA2+CIA_PRA
-;	  cmp CIA2+CIA_PRA
-;          bne l4
-;          asl
-jsr checkin
-          bcc l4
-
-l5
-;	  lda CIA2+CIA_PRA
-;	  cmp CIA2+CIA_PRA
-;          bne l5
-;	  asl
-jsr checkin
-          bcs l5
-
-l3
-;	  lda CIA2+CIA_PRA
-;	  cmp CIA2+CIA_PRA
-;          bne l3
-;	  asl
-jsr checkin
-          bcc l3
-
-          jsr clklo
-          lda #8
-          sta cnt2
-
-l6  
-	  lda CIA2+CIA_PRA
-	  cmp CIA2+CIA_PRA
-          bne l6
-	  asl
-          bcc timexout
-
-          ror byte            ; bit setzen
-          bcs l7
-          jsr datalo
-          bne l8
-l7        jsr datahi
-
-l8        jsr clkhi
-;          jsr waitus
-nop:nop:nop:nop
-;          jsr dhiclo
-lda CIA2+CIA_PRA
-and #%11011111
-ora #%00010000
-sta CIA2+CIA_PRA
-          dec cnt2
-          bne l6
-
-          jsr waitdlo
-          bcs timeout
-          rts
-timeout   lda #3
-          .byt $2c
-timexout  lda #4
-          jmp error
-
-checkin
-	lda CIA2+CIA_PRA
-	cmp CIA2+CIA_PRA
-	bne checkin
-	asl
-	rts          
-/*
-testatn   .(
-          lda VIA1+VIA_DRA
-          bmi tstatn
-          and #%00100000
-          beq c
-s         sec
-          rts
-tstatn    and #%00100000
-          beq s
-c         clc
-          rts
-          .)
-*/
-clklo    
-	  lda CIA2+CIA_PRA
-	  ora #%00010000
-	  sta CIA2+CIA_PRA
-          rts
-clkhi  
-	  lda CIA2+CIA_PRA
-	  and #%11101111
-	  sta CIA2+CIA_PRA
-          rts
-datalo 
-	  lda CIA2+CIA_PRA
-	  ora #%00100000
-	  sta CIA2+CIA_PRA
-          rts
-datahi 
-	  lda CIA2+CIA_PRA
-	  and #%11011111
-	  sta CIA2+CIA_PRA
-          rts
-atnlo  
-	  lda CIA2+CIA_PRA
-	  ora #%00001000
-	  sta CIA2+CIA_PRA
-          rts
-atnhi  
-	  lda CIA2+CIA_PRA
-	  and #%11110111
-	  sta CIA2+CIA_PRA
-          rts
-
-;dhiclo
-;	  lda CIA2+CIA_PRA
-;	  and #%11011111
-;	  ora #%00010000
-;	  sta CIA2+CIA_PRA
-;         rts
-
-
-seterror  ora status
-          sta status
-          rts
-
-waitdlo   
-          jsr setti
-w1        jsr fragti
-          bne w2
-	  lda CIA2+CIA_PRA
-	  cmp CIA2+CIA_PRA
-          bne w1
-	  asl
-          bcs w1
-          rts
-w2        sec
-          rts
-
-&setti 
-lda CIA2+CIA_CRB		; stop timer
-and #%11111110
-sta CIA2+CIA_CRB
-	  lda #<1000
-	  sta CIA2+CIA_TBL
-	  lda #>1000
-	  sta CIA2+CIA_TBH
-lda CIA2+CIA_ICR		; clear irq flag
-;	  lda CIA2+CIA_CRB
-;	  and #%10011111	; count Phi2
-;	  ora #%00011001	; start, force load and single shot.
-lda #%00010001
-	  sta CIA2+CIA_CRB
-          rts
-&fragti 
-	  lda CIA2+CIA_ICR
-	  and #%00000010
-          rts
-
-waitms    txa
-          ldx #$b6
-          bne w4
-waitus    txa
-          ldx #8
-w4        dex
-          bne w4
-          tax
-          rts
-
-+IECIN    sei
-          jsr iecin
-          cli
-          rts
-
-+IECOUT    
-          sei
-          pha
-          clc
-          bit bytfl
-          bmi iout
-          sec
-          ror bytfl
-          bne endout
-
-iout      jsr iecout
-          
-endout    pla
-          sta byte
-lda status
-cmp #1
-          cli
-          rts
-          
-
-talk      ora #$40
-          .byt $2c
-listen    ora #$20
-          sei
-          jsr atnout
-          cli
-          rts
-
-sectalk
-          sei
-          sta byte
-          jsr iec2out
-          bcs st1
-          jsr datalo
-          jsr atnhi
-          jsr clkhi
-st2       ;bit VIA1+VIA_DRA
-	  bit CIA2+CIA_PRA
-          bvs st2
-st1       cli
-          rts
-          
-
-seclisten sei
-          sta byte
-          jsr iec2out
-          jsr atnhi
-          cli
-          rts
-
-+UNTALK    sei
-          jsr clklo
-          lda #$5f
-          jsr atnout
-          jsr atnhi
-          jsr clkhi
-          jsr datahi
-          cli
-          rts
-
-+UNLISTEN  lda #$3f
-          sei
-          jsr atnout
-          jsr atnhi
-          jsr clkhi
-          cli
-          rts
-
-          
-          .)
-
-#endif /* PARALLEL --------------------------------------------------------*/
-
-#endif /* C64 -------------------------------------------------------------*/
-
 #print syszp
 #print sysmem
 #print sysblk
@@ -4534,12 +3230,6 @@ seclisten sei
 #define   ROM
 #include  "stdio.a65"
 #endif
-
-#undef ANZDRV
-#undef MAXLEN 
-#undef MAXFILE 
-#undef BUFSIZE
-
 
 ende      .)
 

@@ -1,3 +1,26 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
 
           .(
 
@@ -46,11 +69,11 @@ IGNORESIGN ="-"
 30000 ;********************************
 30001 ;MONITOR-PROGRAMM
 30002 ;********************************
-+MONITOR  tsx
+&MONITOR  tsx
           dex
           dex
           stx BRKSP
-#ifndef NOSYSFKT
+#ifndef SHORTLINE
           lda #16
 #else
           lda #8
@@ -160,7 +183,13 @@ MOgetenv jsr GETADR:bcs MOCEOx
           jsr GETENV
           jmp show
 
-MOfork   jsr GETADR:bcs MOCEOx
+MOfork    
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#endif
+	  jsr GETADR:bcs MOCEOx
           sta PCBUF+FORK_ADR
           stx PCBUF+FORK_ADR+1
           jsr GETADR:bcs MOCEOx
@@ -177,7 +206,14 @@ MOfork   jsr GETADR:bcs MOCEOx
           sec
           ldx #SEND_SYS
           jsr SEND
-          jmp show
+#ifdef NOMMU
+	  jsr mog
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+          jmp BR		;show
+#else
+	  jmp show
+#endif
 
 MOpsem   jsr GETADR:bcs MOCEOx
           tax
@@ -315,7 +351,7 @@ BDX       rts
 12100 LDA (Z1),Y:STA Z3+1:BD3 INY:STY LEN:RTS
 12105 BD4 LDX #4:BD4A CMP ANDC,X:BEQ BD40:DEX:BPL BD4A:LDA #56:BNE BD4B
 12110 BD40 LDA ANDT,X:STA NR:LDA ANDA,X:TAY:BNE BD2OUT
-12115 &ZEID JSR CRLFOUT:+ZEID2 LDA #MEASS:JSR MASOUT:JSR GETPAR
+12115 &ZEID JSR CRLFOUT:&ZEID2 LDA #MEASS:JSR MASOUT:JSR GETPAR
 12120 LDA NR:ASL:CLC:ADC NR:TAY:LDX #3
 12125 ZD1 LDA TEXT,Y:JSR SEROUT:INY:DEX:BNE ZD1
       JSR SSPOUT:LDY LEN:DEY:BEQ ZDEND

@@ -1,3 +1,26 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
 
 #ifndef   P_KIND
 
@@ -7,11 +30,17 @@
 #define   MMU       $eff0
 #define   BLKSIZ    $1000
 #define   SYSPAGE   $0             /* $12 zum testen, wenn System nicht startet  */
+/*
 #ifndef NOMMU
+#define   PRGSTART  $8000
+#else
+#ifdef C64
 #define   PRGSTART  $8000
 #else
 #define   PRGSTART  $c000
 #endif
+#endif
+*/
 
 #define   DVT_ADR   0
 #define   DVT_POS   2
@@ -26,7 +55,10 @@
 
 #define   P_KIND    0
 #define   P_MEM     1         /* ungÅltig bei Device             */
-#define   P_RES     2         /* zwei Byte reserviert            */
+#define   P_RES     2         /* two byte reserved - in the ROM, the
+				 first byte gives the device number
+				 the stdin/out/err have to be directed
+				 to */
 #define   P_ADR     4
 #define   P_TAB     6
 
@@ -36,6 +68,7 @@
 #define   PK_DEV    1         /* Max innerhalb eines 4k Blocks   */
 #define   PK_FS     2         /* Std-Streams auf Nulldev         */
  
+/**************************************************************************/
 /*        Hardware-Errors          */
 
 #define   HE_ZP     <-1
@@ -97,6 +130,7 @@
 #define   E_ILLNAM  <-80      /* Name mit Sonderzeichen *,?,"         */
 #define   E_FOPEN   <-81      /* file fÅr Zugriff locked (file opened)*/
 
+/**************************************************************************/
 /*        Stream-Commands          */
 
 #define   SC_GET    0
@@ -191,7 +225,33 @@
 #define   TC_EOL    $8b
 #define   TC_CLL    $8c
 
-/*        SysProcCalls             */
+/*********************** System Semaphores *************************/
+/* System semaphores cannot be allocated and/or freed with 
+ * GETSEM/FRESEM, but can be used with PSEM and VSEM.
+ *
+ * The semaphores marked with '(NOMMU)' need only be used without
+ * MMU, while the others should be used anyway, to share the resource
+ * between any tasks.
+ */
+ 
+#define	SEM_SENDBUF	<-1	/* Send buffer (NOMMU) */
+
+/* 
+ * the following semaphore numbers are defined, but not (yet) really 
+ * used by the current implementation. Especially the SERIEC semaphore
+ * can be used to share the serial bus between fsiec for CBM floppies
+ * and fsibm (with changed interface for VC1571) for PC style disks.
+ */
+
+#define	SEM_STDIO	<-2	/* parts of the STDIO library (NOMMU) */
+#define	SEM_PARIEC	<-3	/* parallel IEC bus */
+#define	SEM_SERIEC	<-4	/* serial IEC bus */
+#define	SEM_IBMDISK	<-5	/* IBM floppy interface */
+
+
+/*********************** SEND SYSTEM *******************************/
+/*        SysProcCalls 
+ */
 
 #define   SEND_SYS       $ff
 
@@ -250,6 +310,7 @@
 #define   TE_SG_MIN      4
 #define   TE_SG_SEC      5
 
+/*********************** Hardware structs *******************************/
 /*        SysIO                    */
 
 #define   SYS_KEY   %01000000
@@ -300,6 +361,36 @@
 #define   ACIA_SR   1
 #define   ACIA_CMD  2
 #define   ACIA_CTRL 3
+
+/*	  CIA 6526		   */
+
+#define	CIA_PRA		0
+#define	CIA_PRB		1
+#define	CIA_DDRA	2
+#define	CIA_DDRB	3
+#define	CIA_TAL		4
+#define	CIA_TAH		5
+#define	CIA_TBL		6
+#define	CIA_TBH		7
+#define	CIA_TOD_10TH	8
+#define	CIA_TOD_SEC	9
+#define	CIA_TOD_MIN	10
+#define	CIA_TOD_HR	11
+#define	CIA_SDR		12
+#define	CIA_ICR		13
+#define	CIA_CRA		14
+#define	CIA_CRB		15
+
+/*	  TPI 6525		   */
+
+#define	TPI_PA		0
+#define	TPI_PB		1
+#define	TPI_PC		2
+#define	TPI_DDPA	3
+#define	TPI_DDPB	4
+#define	TPI_DDPC	5
+#define	TPI_CREG	6
+#define	TPI_AIR		7
 
 #endif
 

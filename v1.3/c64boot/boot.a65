@@ -1,0 +1,82 @@
+
+	.word $033c
+	*=$033c
+
+	sei
+	lda #0
+	sta $d01a	; disable VIC irqs
+
+	lda #$7f
+	sta $dc0d	; disable CIA1 irqs
+	sta $dd0d	; disable CIA2 irqs (NMI)
+
+	lda 0
+	ora #7
+	sta 0		; cpu ddr
+
+	; first copy the charom from $1000 to $d000, under the i/o
+
+	ldx #16		; 4 kByte
+	ldy #0
+
+	lda #$10
+	sty $fd
+	sta $fe
+
+	lda #$d0
+	sty $fb
+	sta $fc
+
+	lda 1
+	and #%11111000
+	sta 1
+
+cloop	lda ($fd),y
+	sta ($fb),y
+	iny
+	bne cloop
+
+	inc $fe
+	inc $fc
+	dex
+	bne cloop
+
+	; now copy the ROM image into its place
+
+	lda 1		; charom hi, Hiram lo, Loram hi
+	ora #%101	; which makes all ROMs disappear...
+	and #%11111101	; only I/O is still there
+	sta 1
+
+	lda #0
+	ldx #$80
+
+	sta $fb		; target address
+	sta $fc
+
+	sta $fd		; source address
+	lda #$a0
+	sta $fe
+
+	ldy #0
+loop			; copy xr pages of 256 byte from fd/fe downwards
+			; to fb/fc
+	dec $fc
+	dec $fe
+
+	lda $fc		; leave out I/O
+	and #$f0
+	cmp #$d0
+	beq l2
+
+l1	lda ($fd),y
+	sta ($fb),y
+	iny
+	bne l1
+l2
+	dex
+	bne loop
+;.byt 2			; x64 trap...
+	jmp $f000
+	rts
+

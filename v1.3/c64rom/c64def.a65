@@ -1,0 +1,78 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+/*
+ * These are the C64 specific defines
+ */
+
+#define	C64CIA1	$dc00
+#define	C64CIA2	$dd00
+#define	C64VIC	$d000
+
+#if 0				/* these defs are already in oa1str.def... */
+#define	CIA_PRA		0
+#define	CIA_PRB		1
+#define	CIA_DDRA	2
+#define	CIA_DDRB	3
+#define	CIA_TALO	4
+#define	CIA_TAHI	5
+#define	CIA_TBLO	6
+#define	CIA_TBHI	7
+#define	CIA_TOD_10TH	8
+#define	CIA_TOD_SEC	9
+#define	CIA_TOD_MIN	10
+#define	CIA_TOD_HR	11
+#define	CIA_SR		12
+#define	CIA_ICR		13
+#define	CIA_CRA		14
+#define	CIA_CRB		15
+#endif
+
+#define	VIC_SPRITE_X	0
+#define	VIC_SPRITE_Y	1
+#define	VIC_SPRITE_XMSB	16
+#define	VIC_CR1		17
+#define	VIC_RASTERIRQ	18
+#define	VIC_LPEN_X	19
+#define	VIC_LPEN_Y	20
+#define	VIC_SPRITE_EN	21
+#define	VIC_CR2		22
+#define	VIC_SPRITE_YEXP	23
+#define	VIC_BASE	24
+#define	VIC_IRR		25
+#define	VIC_IMR		26
+#define	VIC_SPRITE_PRIO	27
+#define	VIC_SPRITE_MCOL	28
+#define	VIC_SPRITE_XEXP	29
+#define	VIC_SPRITE_SPR	30
+#define	VIC_SPRITE_BGND	31
+#define	VIC_EXT_COL	32
+#define	VIC_BGND_COL0	33
+#define	VIC_BGND_COL1	34
+#define	VIC_BGND_COL2	35
+#define	VIC_BGND_COL3	36
+#define	VIC_SPRITE_MC0	37
+#define	VIC_SPRITE_MC1	38
+#define	VIC_SPRITE_COL	39		/* +0, ... ,+7 */
+
+
