@@ -25,6 +25,7 @@
  * This is a driver for the newly developed 9600 baud RS232 interface
  * for the C64 and the C128. It uses the shift registers of the two
  * CIA 6526 for receiving and transmitting bytes.
+ * Currently it runs on 1MHz CPU clock (i.e. C64) only. 
  *
  * When sending, it shifts the data byte out through the CIA1 SR,
  * adding a start bit at the beginning and 7 stopbits at the end,
@@ -51,6 +52,7 @@
 /*
  * status: Bit 	0 = 1= handshake enabled
  *		1 : 1= no ACIA found
+ *		4 : 1= we want to process NMIs
  * 		5 : 1= set RTS hi
  *		6 : 1= we are transmitting
  *	  	7 : 1= we are receiving
@@ -164,6 +166,14 @@ l0	lsr
 	and #%10000110
 	ora #%10000110
 	sta C64CIA2+CIA_DDRB
+
+	lda #$80
+	sta rmode
+
+	sec
+	lda #<NMIserial
+	ldy #>NMIserial
+	jsr SETNMI		; old NMIvector is saved by SETNMI 
 
 	plp
           clc
@@ -282,14 +292,18 @@ ctrlnmi	.(
 	cmp #NMI_ON
 	bne off
 	lda status
-	and #%11011111
+	and #%00100000
 	bne norts
-	jsr rtslo
-norts
-	jmp ennmi
+	jsr rts_lo
+norts	lda status
+	and #%00010000
+	beq nonmi
+	jsr nmi_on
+nonmi	rts
+	
 off
-	jsr rtshi
-	jsr disnmi
+	jsr rts_hi
+	jsr nmi_off
 	rts
 	.)
 
@@ -342,17 +356,14 @@ startbit
 
 	.)
 
-nmion	.(
-	lda #$80
-	sta rmode
-
-	sec
-	lda #<NMIserial
-	ldy #>NMIserial
-	jsr SETNMI
-	sta oldnmi
-	sty oldnmi+1
-
+nmion   .(
+	lda status
+	ora #%00010000
+	sta status
+	lda nmistate
+	cmp #NMI_ON
+	bne nonmi
+&nmi_on
 	lda #<100
 	sta C64CIA2+CIA_TBL
 	lda #>100
@@ -361,64 +372,50 @@ nmion	.(
 	lda #%00010010
 	sta C64CIA2+CIA_CRB	; Timer B force load, stop, pulse PB7
 
-
-	lda nmistate
-	cmp #NMI_ON
-	bne onx
-&ennmi
 	lda C64CIA2+CIA_ICR	; clear NMI
 	lda #%10011000		; enable IRQ for Flag2
 	sta C64CIA2+CIA_ICR
-onx
+nonmi
 	rts
 	.)
 
-disnmi	.(
+nmioff	.(
+	lda status
+	and #%11101111
+	sta status	
+&nmi_off
 	lda #%00011000
 	bit rmode
-	bpl disnmi		; wait for char received
+	bpl nmi_off		; wait for char received
 	sta C64CIA2+CIA_ICR
 	lda C64CIA2+CIA_ICR
 	rts
 	.)
 
-nmioff	.(
-	jsr disnmi
-	clc			; TODO - enable other NMI routines
-	jsr SETNMI
-	rts
-	.)
-
 /*****************************************************************/
 
-dtrhi
-dtrlo
-	rts
-
 rtshi
+	lda status
+	ora #%00100000
+	sta status	
+rts_hi
 	lda C64CIA2+CIA_PRB
 	and #%11111101
 	sta C64CIA2+CIA_PRB
-	lda nmistate
-	cmp #NMI_ON
-	bne noy
-	lda status
-	ora #%00100000
-	sta status
-noy
 	rts
 
 rtslo
+	lda status
+	and #%11011111
+	sta status	
 	lda nmistate
-	cmp #NMI_OFF
-	beq nox
+	cmp #NMI_ON
+	bne nolo
+rts_lo
 	lda C64CIA2+CIA_PRB
 	ora #%00000010
 	sta C64CIA2+CIA_PRB
-nox
-	lda status
-	and #%11011111
-	sta status
+nolo
 	rts
 
 /*****************************************************************/
@@ -444,12 +441,12 @@ o2        cmp #DC_RX_ON		; switch receiver on
           bne o3
 	jsr nmion
 	jsr rtslo
-	jsr dtrlo
+	;jsr dtrlo
           lda #DC_SW_RX
           bne o2a
 o3        cmp #DC_TX_ON		; switch sender on
           bne o4
-	jsr dtrlo
+	;jsr dtrlo
           lda #DC_SW_TX
 o2a       ora status
           sta status
@@ -491,7 +488,7 @@ txoff     ldx dev
 checkdtr
 	and #DC_SW_TX+DC_SW_RX
 	bne active
-	jsr dtrhi
+	;jsr dtrhi
 active 	jmp ok
 
 o6        cmp #DC_HS		; set handshake -- currently ignored (TODO)

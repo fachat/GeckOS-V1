@@ -17,3 +17,5 @@
 - monitor command "e" should allow more than one consecutive exchanges at a 
   time
 
+- SLIP has to allow more than 256 bytes in a packet!
+

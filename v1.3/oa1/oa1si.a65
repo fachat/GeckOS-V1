@@ -533,13 +533,13 @@ pre5      adc #1:bne pre5
 	  jmp (nmiadr)
           
 nmiadr    =sysmem
-nmistate  =sysmem+2
+nmicnt  =sysmem+2
 -sysmem   +=3
 
 &ininmi   ;lda #<zend
           ;ldy #>zend
-	  lda #NMI_ON
-	  sta nmistate
+	  lda #NMI_ON		; 0
+	  sta nmicnt
 ininmi2	  lda #<yendnmi
 	  ldy #>yendnmi
 n1        sta nmiadr
@@ -559,18 +559,50 @@ yendnmi   rti
 	  pha
 	  lda nmiadr+1
 	  pha
-	  txa
-          jsr n1
+
+	php
+	sei
+	lda #NMI_OFF
+	jsr CTRLNMI	; before we mess with the NMI pointer, switch it off
+
+	txa
+        jsr n1
 
 	lda nmiadr
 	sec
-	sbc #2
-	sta tmp2
+	sbc #4
+	sta tmp
 	lda nmiadr+1
 	sbc #0
+	sta tmp+1
+
+	ldy #0
+	lda (tmp),y
+	sta tmp2
+	iny
+	lda (tmp),y
 	sta tmp2+1
-	lda nmistate
-	jsr c2
+
+	tsx
+	lda $0102,x	
+	sta (tmp2),y
+	dey
+	lda $0103,x
+	sta (tmp2),y
+
+	ldy #2
+	lda (tmp),y
+	sta tmp2
+	iny
+	lda (tmp),y
+	sta tmp2+1	
+
+	lda #NMI_OFF
+ 	jsr c2		; init new device with NMI off
+
+	lda #NMI_ON	; now switch on again, if allowed
+	jsr CTRLNMI
+	plp
 
 	  pla
 	  tay
@@ -588,12 +620,43 @@ cmd	=sysmem
 
 +ctrlnmi 
 	jsr memsys
+	php
+	sei
+	cmp #NMI_ON
+	beq con
+	cmp #NMI_OFF
+	beq coff
+	lda #E_NOTIMP
+	.byt $2c
+crts	lda #E_OK
+	plp
+	cmp #1
+	jsr memtask
+	rts
+
+con 	lda nmicnt
+	beq crts
+	dec nmicnt
+	bne crts
+	lda #NMI_ON
+	beq nmicmd2
+
+coff	clc
+	lda nmicnt
+	inc nmicnt
+	cmp #0
+	bne crts
+	lda #NMI_OFF
+nmicmd2
+	jsr nmicmd		; nmicmd is only called at state change!
+	jmp crts
+
+nmicmd
 	sta cmd 
 	tya
 	pha
 	txa
 	pha
-
 	lda nmiadr
 	ldx nmiadr+1
 
@@ -635,7 +698,7 @@ ce	clc
 	pla
 	tay
 	lda cmd
-	jsr memtask
+	clc
 	rts
 
 c2	jmp (tmp2)

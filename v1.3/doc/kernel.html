@@ -275,6 +275,8 @@ $f06c	XRECEIVE receives a message from a specified task only. parameter as
 $f06f	SETNMI	in systems without MMU, set the system NMI routine address.
 		(carry=1): set the new NMI routine address (in a/y)
 			   returns the old NMI address in a/y.
+			   The old address is saved in the place pointed
+			   to by (newadress-4) (see below) by this routine.
 		(carry=0): clear NMI routine.
 		The NMI routine has to save all registers by itself!
 
@@ -291,8 +293,7 @@ $f06f	SETNMI	in systems without MMU, set the system NMI routine address.
 
 		A possible scenario then is:
 
-		Task calls SETNMI with NEWNMI in a/y. SETNMI returns OLDNMI
-		in a/y and task saves that in oldvec. We then have the 
+		Task calls SETNMI with NEWNMI in a/y. We then have the 
 		structure:
 
 		(NEWNMI-4)	address of oldvec -->   address of OLDNMI
