@@ -1,23 +1,17 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
-    Multitasking Operating System for 6502 Computers
+    This BASIC interpreter is derived from Copyrighted source!
+    Therefore I do not hold copyrights on it.
+    The Copyright is held by ???
 
-    Copyright (C) 1989-1996 Andre Fachat 
+    That's why this is only an educational example of how to
+    port programs to the OS/A65 operating system.
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
+    DO NOT ASSEMBLE OR RUN THIS PROGRAM!
+    
+    This file is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 ****************************************************************************/
 
