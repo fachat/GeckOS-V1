@@ -279,3 +279,26 @@ a way missing to remove a driver from the chain.
 The C64 fast serial driver uses this method now. Although flooding the
 computer with bytes slows it down to near unusability.
 
+******** OS/A 1.3.11 ******** jan1997 A.Fachat
+
+Been working on TCP implementation. discard & echo ports work. 
+Also connection closing ceremonies. Packet Retransmission works.
+Retransmission timeouts, timewait timeouts work.
+chargen port works. program registers itself as filesystem.
+
+TODO: 32-bit-modulo, some timeouts...
+
+******** OS/A 1.3.12 ******** feb1997 A.Fachat
+
+Implemented the Gecko OS ROM. It features a shell (with monitor), 
+the irtx program to send commands to IR devices (like CD players or
+TV sets), a serial IEC filesystem. The shell runs over the serial 
+line (with 16550).
+
+******** OS/A 1.3.12d ******** 9mar1997 A.Fachat
+
+The fstcp filesystem works for reading files and directories.
+Directories without directory mask, though. 
+TODO: 32-bit modulo, autoconnect after broken connection, fstcp writes
+
+
