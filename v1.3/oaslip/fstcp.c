@@ -44,16 +44,23 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <sys/stat.h>
+#include <dirent.h>
+
 #include <netinet/in.h>
 #include <netdb.h>
+
+#include <time.h>
 
 #include "fstcp.h"
 #include "oa1fs.h"
 
+#define	min(a,b)	(((a)<(b))?(a):(b))
 
 typedef struct {
 	int	state;
 	FILE	*fp;
+	DIR 	*dp;
 } File;
 
 File files[MAXFILES];
@@ -68,14 +75,19 @@ void usage(void) {
 
 void do_cmd(char *buf, int fd) {
 	int tfd, cmd, len;
-	char retbuf[70];
+	char retbuf[200];
 	FILE *fp;
+	DIR *dp;
 	int n;
+	struct dirent *de;
+	struct stat sbuf;
+	struct tm *tp;
 
 	cmd = buf[FSP_CMD];
 	tfd = buf[FSP_FD];
 	len = buf[FSP_LEN];
 	fp = files[tfd].fp;
+	dp = files[tfd].dp;
 
 	printf("got cmd=%d, fd=%d, name=%s\n",cmd,tfd,buf+FSP_DATA);
 
@@ -85,15 +97,56 @@ void do_cmd(char *buf, int fd) {
 	retbuf[FSP_DATA] = -22;
 
 	switch(cmd) {
+	case FS_OPEN_DR:
+		dp = opendir("." /*buf+FSP_DATA*/);
+printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,dp);
+		if(dp) {
+		  files[tfd].fp = NULL;
+		  files[tfd].dp = dp;
+		  retbuf[FSP_DATA] = 0;
+		}
 	case FS_OPEN_RD:
 		fp = fopen(buf+FSP_DATA, "rb");
 printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 		if(fp) {
 		  files[tfd].fp = fp;
+		  files[tfd].dp = NULL;
 		  retbuf[FSP_DATA] = 0;
 		}
 		break;
 	case FS_READ:
+		if(dp) {
+		  de = readdir(dp);
+		  if(!de) {
+		    closedir(dp);
+		    retbuf[FSP_CMD] = FS_EOF;
+		    retbuf[FSP_LEN] = 3;
+		    break;
+		  }
+		  n = stat(de->d_name, &sbuf);
+		  /* TODO: check return value */
+ 		  retbuf[FSP_DATA+FS_DIR_LEN] = sbuf.st_size & 255;
+ 		  retbuf[FSP_DATA+FS_DIR_LEN+1] = (sbuf.st_size >> 8) & 255;
+ 		  retbuf[FSP_DATA+FS_DIR_LEN+2] = (sbuf.st_size >> 16) & 255;
+ 		  retbuf[FSP_DATA+FS_DIR_LEN+3] = (sbuf.st_size >> 24) & 255;
+
+		  tp = localtime(&sbuf.st_mtime);
+ 		  retbuf[FSP_DATA+FS_DIR_YEAR]  = tp->tm_year;
+ 		  retbuf[FSP_DATA+FS_DIR_MONTH] = tp->tm_mon;
+ 		  retbuf[FSP_DATA+FS_DIR_DAY]   = tp->tm_mday;
+ 		  retbuf[FSP_DATA+FS_DIR_HOUR]  = tp->tm_hour;
+ 		  retbuf[FSP_DATA+FS_DIR_MIN]   = tp->tm_min;
+ 		  retbuf[FSP_DATA+FS_DIR_SEC]   = tp->tm_sec;
+
+ 		  retbuf[FSP_DATA+FS_DIR_MODE]  = S_ISDIR(sbuf.st_mode) ? 
+						FS_DIR_MOD_DIR : FS_DIR_MOD_FIL;
+		  strncpy(retbuf+FSP_DATA+FS_DIR_NAME, de->d_name,
+			min(strlen(de->d_name)+1, 199-FSP_DATA-FS_DIR_NAME));
+		  retbuf[199]=0;
+		  retbuf[FSP_LEN] = FSP_DATA+FS_DIR_NAME+
+				strlen(retbuf+FSP_DATA+FS_DIR_NAME) + 1;
+		  retbuf[FSP_CMD] = FS_WRITE;
+		} else
 		if(fp) {
 		  n = fread(retbuf+FSP_DATA, 1, 64, fp);
 		  retbuf[FSP_LEN] = n+FSP_DATA;
@@ -196,7 +249,7 @@ int main(int argc, char *argv[]) {
 						errno, strerror(errno));
 	    return 2;
 	  }
-	  if(fork()==0) {
+/*	  if(fork()==0) */ {
 	    char buf[8192];
 	    int wrp,rdp, plen;
 	    int n;

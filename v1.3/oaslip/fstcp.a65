@@ -598,6 +598,40 @@ inc $d020
 	lda signal: jsr EHexout
 	jsr ECrlfout
 	jsr tcp_sig_close
+
+	ldx #0
+	stx fd
+l0	lda status,x
+	cmp #F_RD
+	bcc next
+	cmp #F_RD_RXD
+	beq r1
+	cmp #F_RD_EOF
+	beq r1
+	cmp #F_RD_CLOSE+1
+	bcs write
+	bcc rdc1
+
+r1	lda fsrxb,x
+	tax
+	jsr bfree
+	
+rdc1	ldx fd
+	lda stream,x
+	tax
+	lda #SC_EOF
+	jsr STRCMD
+	ldx fd
+	lda #F_FREE
+	sta status,x	
+	jmp next
+
+write
+
+next	inc fd
+	ldx fd
+	cpx #MAXFILES
+	bcc l0
 	rts
 	.)
 
