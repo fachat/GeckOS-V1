@@ -1,0 +1,192 @@
+
+/****************************************************************************
+   
+    OS/A65 Version 1.3.9
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+/**********************************************************************/
+/* 				SLIP				      */
+/*		Serial Line Internet Protocol Driver		      */
+/*								      */
+/* Driver connects STDIN/OUT with a serial line internet protocol     */
+/* 								      */
+/* Options:							      */
+/*   ROM							      */
+/*   NOPRG							      */
+/* 								      */
+/**********************************************************************/
+
+
+icmp	.(
+	lda #<id
+	ldy #>id
+	jsr checksum2
+
+#ifdef DEBUGPKT
+php
+pha
+txa
+pha
+DB("ICMP Checksum=")
+pla
+tay
+jsr EHexout
+pla
+pha
+jsr EHexout
+jsr ECrlfout
+tya
+tax
+pla
+plp
+#endif
+	bcc icmpok
+	jmp discardics
+icmpok
+	ldy #0
+	lda (id),y		; icmp type
+	cmp #8			; echo message
+	beq echo
+	jmp discard
+echo
+	/* ECHO Message */
+				; modify message to echo reply message
+	lda #0			; icmp echo reply
+	sta (id),y
+
+	ldy #IPH_SRC
+	lda (ip),y
+	ldy #IPH_TRG
+	sta (ip),y
+	ldy #IPH_SRC+1
+	lda (ip),y
+	ldy #IPH_TRG+1
+	sta (ip),y
+	ldy #IPH_SRC+2
+	lda (ip),y
+	ldy #IPH_TRG+2
+	sta (ip),y
+	ldy #IPH_SRC+3
+	lda (ip),y
+	ldy #IPH_TRG+3
+	sta (ip),y
+
+	ldy #IPH_SRC
+l0	lda MyIP-IPH_SRC,y
+	sta (ip),y
+	iny
+	cpy #IPH_SRC+4
+	bcc l0
+
+	ldy #ICMP_CSUM
+	lda #0
+	sta (id),y
+	iny
+	sta (id),y
+
+	lda #<id
+	ldy #>id
+	jsr checksum2
+
+	ldy #ICMP_CSUM+1
+	sta (id),y
+	dey
+	txa
+	sta (id),y
+	jmp lx
+
++sendip
+	lda #20
+	sta ipl
+	clc
+	adc idlen
+	sta ilen
+	lda #0
+	sta ipl+1
+	adc idlen+1
+	sta ilen+1
+
+	ldy #IPH_VER
+	lda #$45
+	sta (ip),y
+	iny
+	lda #0
+	sta (ip),y
+	iny
+	lda ilen+1
+	sta (ip),y
+	iny
+	lda ilen
+	sta (ip),y
+	iny
+	lda #0
+	sta (ip),y	; ident
+	iny
+	sta (ip),y
+
+	iny		;ldy #IPH_FL
+	lda #0
+	sta (ip),y
+	iny
+	sta (ip),y
+
+lx	lda #0
+	ldy #IPH_CSUM
+	sta (ip),y
+	iny
+	sta (ip),y
+	ldy #IPH_TTL
+	lda #64
+	sta (ip),y
+
+	lda #<ip
+	ldy #>ip
+	jsr checksum2
+	ldy #IPH_CSUM+1
+	sta (ip),y
+	dey
+	txa
+	sta (ip),y
+
+#ifdef DEBUGSEND
+DB("^m^jSend packet:^m^j")
+jsr printpacket
+tsx
+txa
+jsr EHexout
+#endif
+	ldx islot
+	lda ilen
+	ldy ilen+1
+	jsr btrunc
+	ldx islot
+	jsr queueslot
+	lda #<-1
+	sta islot
+	jmp startin
+
+discardics
+        DB("Packet discarded: ICMP checksum^m^j")
+        jmp discard
+
+	.)
+

@@ -169,12 +169,14 @@ DB("^m^jbinit ok^m^j")
 #ifndef CHARIN
 	jsr ibufinit
 #endif
-
+	
 	jsr oinit
 	bcs exit
 DB("^m^joinit ok^m^j")
 	jsr iinit
 DB("iinit ok^m^j")
+	bcs exit
+	jsr tcpinit
 	bcc doloop
 exit	rts
 
@@ -183,6 +185,7 @@ MyIP	.byt MY_IP
 doloop
 	jsr loopin
 	jsr loopout
+	jsr tcploop
 	jsr SUSPEND
 	jmp doloop
 
@@ -267,7 +270,7 @@ esc2
 	bcs ende
 			; free buffer slot
 	ldx oslot
-	jsr bfree
+;	jsr bfree
 
 	dec onslot
 	ldy #0
@@ -323,7 +326,7 @@ wrongesc
 	inc onslot
 	rts
 drop
-	DB("^m^jPacket dropped due to full queue^m^j")
+	DB("Packet dropped due to full queue^m^j")
 	jsr bfree
 	rts
 	.)
@@ -336,13 +339,14 @@ drop
 islot	=sysmem
 ist	=sysmem+1	; 0=send data, $80= escaped
 ilen	=sysmem+2
-idlen	=sysmem+4
-ihl	=sysmem+6
--sysmem	+=7
+ihl	=sysmem+4
+-sysmem	+=5
 ip	=syszp
-id	=syszp+2
-iend	=syszp+4
--syszp	+=6
+ipl	=syszp+2
+id	=syszp+4
+idlen	=syszp+6
+iend	=syszp+8
+-syszp	+=10
 
 &iinit	
 	lda #<-1
@@ -473,7 +477,7 @@ l1
 	cmp iend
 	bcc loopin
 DB("input buffer overflow!^m^j")
-discard
+&discard
 	ldx islot
 	jsr getbadr
 	jmp iresp	; no inloop, because if only SL_ENDs are sent, this
@@ -500,9 +504,9 @@ even
 	beq discard	; zero length packet received
 ok
 
-#ifdef DEBUGPKT
+#if 1 /*def DEBUGPKT*/
 	/* so what now? */
-DB("^m^jReceived Packet:^m^j")
+DB("Received Packet:^m^j")
 	jsr printpacket
 
 DB("^m^jip=")
@@ -526,6 +530,7 @@ lda ilen+1
 jsr EHexout
 lda ilen
 jsr EHexout
+jsr ECrlfout
 #endif
 	clc
 	lda ilen
@@ -544,14 +549,15 @@ discp	plp
 	jmp discardlen
 lenok
 	/* header checksum */
+	lda #0
+	sta ipl+1
 	ldy #IPH_VER
 	lda (ip),y
 	and #$0f
 	asl
-
-	pha
 	asl
 	sta ihl
+	sta ipl
 	clc
 	adc ip
 	sta id		; start of datagram data
@@ -566,19 +572,17 @@ lenok
 	lda ilen+1
 	sbc #0
 	sta idlen+1
-	pla
 
-	tax
-	lda ip
-	ldy ip+1
-	jsr checksum
+	lda #<ip
+	ldy #>ip
+	jsr checksum2
 
 #ifdef DEBUGPKT
 php
 pha
 txa
 pha
-DB("^m^jHeader Checksum=")
+DB("Header Checksum=")
 pla
 tay
 jsr EHexout
@@ -598,21 +602,32 @@ plp
 	ldy #IPH_TRG
 l2 	lda MyIP-IPH_TRG,y
 	cmp (ip),y
-	bne discardip
+	beq bla
+	jmp discardip
+bla
 	iny
 	cpy #IPH_TRG+4
 	bcc l2
 
 	/**** so that packet is valid -> process it ****/
+	/* ip has a pointer to the packet, ipl the header length */
+	/* id has a pointer to the packet data, idl the data length */
+	/* ilen has the total packet length */
 
 	ldy #IPH_PROT
 	lda (ip),y
 
 	cmp #1
-	bne no
+	bne noicmp
 	jmp icmp
-no
+noicmp
+	cmp #6
+	bne notcp
+	jmp tcprx
+notcp
+jsr EHexout
 	DB("Packet discarded: unknown protocol^m^j")
+
 	jmp discard
 
 discardcs
@@ -627,140 +642,95 @@ discardlen
 	DB("Packet discarded: length mismatch^m^j")
 	jmp discard
 
-discardics
-	DB("Packet discarded: ICMP checksum^m^j")
-	jmp discard
-
-icmp	.(
-	lda ilen		; well, just take the low byte (TODO)
-	sec
-	sbc ihl
-	clc
-	adc #1
-	lsr
-	tax
-	lda id
-	ldy id+1
-	jsr checksum
-
-#ifdef DEBUGPKT
-php
-pha
-txa
-pha
-DB("^m^jICMP Checksum=")
-pla
-tay
-jsr EHexout
-pla
-pha
-jsr EHexout
-tya
-tax
-pla
-plp
-#endif
-	bcc icmpok
-	jmp discardics
-icmpok
-	ldy #0
-	lda (id),y		; icmp type
-	cmp #8			; echo message
-	beq echo
-	jmp discard
-echo
-	/* ECHO Message */
-				; modify message to echo reply message
-	lda #0			; icmp echo reply
-	sta (id),y
-
-	ldy #IPH_CSUM
-	sta (ip),y
-	iny
-	sta (ip),y
-	ldy #IPH_TTL
-	lda #64
-	sta (ip),y
-
-	ldy #IPH_SRC
-	lda (ip),y
-	ldy #IPH_TRG
-	sta (ip),y
-	ldy #IPH_SRC+1
-	lda (ip),y
-	ldy #IPH_TRG+1
-	sta (ip),y
-	ldy #IPH_SRC+2
-	lda (ip),y
-	ldy #IPH_TRG+2
-	sta (ip),y
-	ldy #IPH_SRC+3
-	lda (ip),y
-	ldy #IPH_TRG+3
-	sta (ip),y
-
-	ldy #IPH_SRC
-l0	lda MyIP-IPH_SRC,y
-	sta (ip),y
-	iny
-	cpy #IPH_SRC+4
-	bcc l0
-
-	lda ihl
-	lsr
-	tax
-	lda ip
-	ldy ip+1
-	jsr checksum
-	ldy #IPH_CSUM+1
-	sta (ip),y
-	dey
-	txa
-	sta (ip),y
-
-	ldy #ICMP_CSUM
-	lda #0
-	sta (id),y
-	iny
-	sta (id),y
-
-	lda idlen
-	lsr
-	tax
-	lda id
-	ldy id+1
-	jsr checksum
-
-	ldy #ICMP_CSUM+1
-	sta (id),y
-	dey
-	txa
-	sta (id),y
-
-#ifdef DEBUGSEND
-DB("^m^jSend packet:^m^j")
-jsr printpacket
-tsx
-txa
-jsr EHexout
-#endif
-	ldx islot
-	lda ilen
-	ldy ilen+1
-	jsr btrunc
-	ldx islot
-	jsr queueslot
-	lda #<-1
-	sta islot
-	jsr startin
-	rts
-	.)
-
 	.)
 
 	/* computes IP header checksum and returns it in a/x */
 	/* address (a/y) + # of 16 bit words parameter (x) */
-checksum .(
+&checksum2 .(
+
+tmp	=sysmem
+len	=sysmem+3
+-sysmem	+=5
+p	=syszp
+-syszp	+=2
+
+	sta p
+	sty p+1
+
+	ldy #3
+	lda (p),y
+	sta len+1
+	dey
+	lda (p),y
+	sta len
+	dey
+	lda (p),y
+	tax
+	dey
+	lda (p),y
+	sta p
+	stx p+1
+
+	lda #0
+	sta tmp
+	sta tmp+1
+	sta tmp+2
+	ldy #0
+loop	
+	iny
+	lda tmp
+	clc
+	adc (p),y
+	sta tmp
+	lda tmp+1
+	dey
+	adc (p),y
+	sta tmp+1
+	bcc l0
+	inc tmp+2
+l0
+	iny
+	iny
+	bne l1
+	inc p+1
+l1
+	lda len
+	sec
+	sbc #2
+	sta len
+	bcs l1a
+	lda len+1
+	sbc #0
+	sta len+1
+	bcc l1b		; underflow (odd size) -> end
+l1a	lda len		
+	ora len+1
+	bne loop
+l1b
+	lda tmp
+	clc
+	adc tmp+2
+	pha
+	lda tmp+1
+	adc #0
+	eor #$ff
+	tax
+	pla
+	eor #$ff
+
+	bne err
+	cpx #0
+	bne err
+	clc
+	rts
+err	sec
+	rts
+	.)
+
+#if 0
+	/* computes IP header checksum and returns it in a/x */
+	/* address (a/y) + # of 16 bit words parameter (x) */
+&checksum_old .(
 
 tmp	=sysmem
 len	=sysmem+3
@@ -819,9 +789,19 @@ l1
 err	sec
 	rts
 	.)
+#endif
 
-#ifdef DEBUGPKT
+#if 1 /*def DEBUGPKT*/
 printpacket .(
+end 	=sysmem
+-sysmem	+=2
+	ldy #3
+	lda (ip),y
+	sta end
+	dey
+	lda (ip),y
+	sta end+1
+
 	ldy #0
 l0
 	lda (ip),y
@@ -830,7 +810,7 @@ l0
 	ldx #STDERR
 	jsr Fputc
 	iny
-	cpy iend
+	cpy end
 	beq lend
 	tya
 	and #7
@@ -839,14 +819,17 @@ l0
 	jmp l0
 lend
 	DB("^m^jHeader Checksum")
+	lda #0
+	sta ipl+1
 	ldy #IPH_VER
 	lda (ip),y
 	and #$0f
 	asl
-	tax
-	lda ip
-	ldy ip+1
-	jsr checksum
+	asl
+	sta ipl
+	lda #<ip
+	ldy #>ip
+	jsr checksum2
 	pha
 	txa
 	jsr EHexout
@@ -854,12 +837,9 @@ lend
 	jsr EHexout
 
 	DB("^m^jData Checksum")
-	lda idlen
-	lsr
-	tax
-	lda id
-	ldy id+1
-	jsr checksum
+	lda #<id
+	ldy #>id
+	jsr checksum2
 	pha
 	txa
 	jsr EHexout
@@ -871,6 +851,9 @@ lend
 	rts
 	.)
 #endif
+
+#include "slicmp.a65"
+#include "sltcp.a65"
 
 	.)
 
@@ -938,606 +921,8 @@ tole
 
 	.)
 
-/**********************************************************************/
-/* New memory management for IP buffers 			      */
-/* exports							      */
-/* 	binit							      */
-/* 	balloc, bfree, btrunc, bsplit, brealloc			      */
-/*	getbadr, getblen					      */
 
-#define	MINBUF	8
-#define	MINMASK	%11111000
-
-	.(
-
-slotladr =sysmem
-slothadr =sysmem+MAXSLOT
-slotllen =sysmem+MAXSLOT*2
-slothlen =sysmem+MAXSLOT*3
--sysmem	+=MAXSLOT*4
-
-flist 	=sysmem
-slot	=sysmem+2
--sysmem	+=3
-
-p	=syszp
-p2	=syszp+2
-p3	=syszp+4
-p4	=syszp+6
--syszp	+=8
-
--sysblk	-=IPBUFFER
-buf	=sysblk
-
-/* init memory management */
-&binit	.(
-	lda #0
-	tay
-l0	sta slotladr,y
-	sta slothadr,y
-	iny
-	cpy #MAXSLOT
-	bcc l0
-
-	sta buf		; freelist start
-	sta buf+1
-	lda #<IPBUFFER
-	sta buf+2
-	lda #>IPBUFFER
-	sta buf+3
-	
-	lda #<buf
-	sta flist
-	lda #>buf
-	sta flist+1
-
-	clc
-	rts
-	.)
-
-/* a/y = size of buffer to be allocated -> x buffer-ID */       
-&balloc	.(
-	/* walk along freelist, and take first matching buffer 
-	   length is made a multiple of 8 (for freelist connectors */
-
-	pha
-	jsr getbslot
-	pla
-	bcc gotslot
-	lda #E_NOMEM
-	rts
-gotslot
-	stx slot
-
-	adc #MINBUF-1
-	and #MINMASK
-	sta slotllen,x
-	tya
-	adc #0
-	sta slothlen,x
-
-#ifdef DEBUGMEM
-DB("^m^jalloc(")
-txa
-jsr EHexout
-lda slothlen,x
-jsr EHexout
-lda slotllen,x
-jsr EHexout
-DB("^m^jFlist=")
-lda flist+1
-jsr EHexout
-lda flist
-jsr EHexout
-jsr ECrlfout
-#endif	
-	lda #0
-	sta p2
-	sta p2+1
-	lda flist
-	sta p
-	lda flist+1
-	sta p+1
-l0
-#if 0	/*def DEBUG*/
-DB("^m^jCheck@")
-lda p+1:jsr EHexout:lda p:jsr EHexout
-jsr ECrlfout
-#endif
-	ldy #2
-	lda (p),y
-	sec
-	sbc slotllen,x
-	sta p3
-	iny
-	lda (p),y
-	sbc slothlen,x
-	sta p3+1
-	bcs found 
-
-	lda p
-	sta p2
-	lda p+1
-	sta p2+1
-	ldy #1
-	lda (p2),y
-	sta p+1
-	dey
-	lda (p2),y
-	sta p
-	ora p+1
-	bne l0
-	
-oops	lda #E_NOMEM
-	sec
-	rts	
-
-found
-	/* ok, we found a free buffer: p points to the buffer, p2 to the
-	   previous one. p3 is the length of the free buffer minus the
-	   needed size. If the buffer is longer than needed, create a 
-	   new free buffer, then link new buffer to freelist */
-
-#if 0	/*def DEBUG*/
-DB("^m^jFound Free buffer to alloc:")
-DB("^m^jbuffer=")
-lda p+1:jsr EHexout:lda p:jsr EHexout
-DB("^m^jprevious=")
-lda p2+1:jsr EHexout:lda p2:jsr EHexout
-DB("^m^jrest len=")
-lda p3+1:jsr EHexout:lda p3:jsr EHexout
-jsr ECrlfout
-#endif
-
-	lda p		/* save buffer address */
-	sta slotladr,x
-	lda p+1
-	sta slothadr,x
-		
-	lda p3 		/* check length */
-	ora p3+1
-	beq nocreate
-	
-	lda p		/* get address of new free buffer */
-	clc
-	adc slotllen,x
-	sta p4
-	lda p+1
-	adc slothlen,x
-	sta p4+1
-
-	ldy #0		/* copy next pointer */
-	lda (p),y
-	sta (p4),y
-	iny
-	lda (p),y
-	sta (p4),y
-
-	iny		/* set new length */
-	lda slotllen,x
-	sta (p),y
-	lda p3
-	sta (p4),y
-	iny
-	lda slothlen,x
-	sta (p),y
-	lda p3+1
-	sta (p4),y
-
-	lda p4
-	sta p
-	lda p4+1
-	sta p+1
-
-nocreate
-	lda p2
-	ora p2+1
-	beq freestart
-
-	ldy #0
-	lda p
-	sta (p2),y
-	iny
-	lda p+1
-	sta (p2),y
-	clc
-	bcc geta
-freestart
-#if 0	/*def DEBUG*/
-DB("^m^jFreestart")
-lda p+1:jsr EHexout:lda p:jsr EHexout:jsr ECrlfout
-#endif
-	lda p
-	sta flist
-	lda p+1
-	sta flist+1
-	clc
-geta
-#ifdef DEBUGMEM
-php
-DB("^m^jallocated buffer ")
-txa: jsr EHexout
-lda slothadr,x: jsr EHexout: lda slotladr,x: jsr EHexout
-lda slothlen,x: jsr EHexout: lda slotllen,x: jsr EHexout
-jsr ECrlfout
-plp
-#endif
-	lda slotladr,x
-	ldy slothadr,x
-	rts
-	.)
-
-/* free buffer (ID=xr) */
-&bfree	.( 
-	lda slothadr,x
-	sta p3+1
-	lda slotladr,x
-	sta p3
-	ora p3+1
-	beq end2
-
-#ifdef DEBUGMEM
-DB("Freeing Slot ")
-txa:jsr EHexout
-lda p3+1
-jsr EHexout
-lda p3
-jsr EHexout
-lda slothlen,x
-jsr EHexout
-lda slotllen,x
-jsr EHexout
-jsr ECrlfout
-#endif
-
-	ldy #2
-	lda slotllen,x
-	sta (p3),y
-	iny
-	lda slothlen,x
-	sta (p3),y	
-
-	lda #0
-	sta slothadr,x
-	sta slotladr,x
-
-	lda flist
-	ora flist+1
-	bne ok		/* no free buffer so far? */
-
-	lda p3
-	sta flist
-	lda p3+1
-	sta flist+1
-	ldy #0
-	tya
-	sta (p3),y
-	iny
-	sta (p3),y
-end2	clc
-	rts
-ok	
-	lda #0
-	sta p2
-	sta p2+1
-	lda flist
-	sta p
-	lda flist+1
-	sta p+1
-
-	/* we have to find the place where to put the buffer in the
-	   ordered free list. Then we have to check if we can merge
-	   free buffers */
-loop
-#if 0	/*def DEBUGMEM*/
-DB("Check slot ")
-lda p+1: jsr EHexout:lda p: jsr EHexout
-DB("["): ldy #3:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
-DB("]->"):ldy #1:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
-jsr ECrlfout
-#endif
-
-	lda p3+1
-	cmp p+1
-	bcc found
-	bne next
-	lda p3
-	cmp p
-	bcc found
-next
-	lda p
-	sta p2
-	lda p+1
-	sta p2+1
-	ldy #0
-	lda (p2),y
-	sta p
-	iny
-	lda (p2),y
-	sta p+1
-	ora p
-	bne loop
-	beq found
-end
-	clc
-	rts
-
-found	/* p2 is the buffer before the one to be freed, p the one behind.
-	   p3 is the buffer to be inserted */
-
-#if 0	/*def DEBUGMEM*/
-DB("Found buffer^m^j")
-DB("p3=")
-lda p3+1:jsr EHexout:lda p3:jsr EHexout:jsr ECrlfout
-DB("p2=")
-lda p2+1:jsr EHexout:lda p2:jsr EHexout
-DB("["):ldy #3:lda (p2),y:jsr EHexout:dey:lda (p2),y:jsr EHexout
-DB("]->"):ldy #1:lda (p2),y:jsr EHexout:dey:lda (p2),y:jsr EHexout
-jsr ECrlfout
-DB("p=")
-lda p+1:jsr EHexout:lda p:jsr EHexout
-DB("["):ldy #3:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
-DB("]->"):ldy #1:lda (p),y:jsr EHexout:dey:lda (p),y:jsr EHexout
-jsr ECrlfout
-#endif
-	lda p2
-	ora p2+1
-	bne fok
-			; insert before the first free buffer so far
-	ldy #0
-	lda flist
-	sta (p3),y
-	iny
-	lda flist+1
-	sta (p3),y
-	lda p3
-	sta flist
-	ldy p3+1
-	sty flist+1
-	jsr bmerge
-#if 0	/*def DEBUGMEM*/
-jsr printmem
-#endif
-	clc
-	rts
-fok			; insert to list
-	ldy #1
-	lda p+1		;lda (p2),y
-	sta (p3),y
-	dey
-	lda p		;lda (p2),y
-	sta (p3),y
-	lda p3
-	sta (p2),y
-	iny
-	lda p3+1
-	sta (p2),y
-
-	lda p3
-	ldy p3+1
-	jsr bmerge
-	lda p2
-	ldy p2+1
-	jsr bmerge
-#if 0	/*def DEBUGMEM*/
-jsr printmem
-#endif	
-	clc
-	rts
-	.)
-
-/* split buffer xr at size a/y for first part. return new buffer ID in x */
-&bsplit	.(
-	stx slot
-#ifdef DEBUGMEM
-pha
-tya
-pha
-DB("^m^jbsplit buffer ")
-txa
-jsr EHexout
-pla
-pha
-jsr EHexout
-pla
-tay
-pla
-pha
-jsr EHexout
-jsr ECrlfout
-pla
-#endif
-
-	clc
-	adc #MINBUF-1
-	and #MINMASK
-	sta p2
-	bcc l0
-	iny
-l0 	sty p2+1
-	tya
-	cmp slothlen,x
-	bcc ok
-	bne oops
-	lda p2
-	cmp slotllen,x
-	bcc ok
-	beq oknull
-oops	rts
-ok	jsr getbslot
-	bcs oops
-	ldy slot
-	clc
-	lda slotladr,y
-	adc p2
-	sta slotladr,x
-	lda slothadr,y
-	adc p2+1
-	sta slothadr,x
-	sec
-	lda slotllen,y
-	sbc p2
-	sta slotllen,x
-	lda slothlen,y
-	sbc p2+1
-	sta slothlen,x
-	
-	lda p2
-	sta slotllen,y
-	lda p2+1
-	sta slothlen,y
-	
-oknull	
-#ifdef DEBUGMEM
-DB("^m^jsplit buffer @")
-	txa
-	jsr EHexout
-	lda slothadr,x
-	jsr EHexout 
-	lda slotladr,x
-	jsr EHexout 
-	lda slothlen,x
-	jsr EHexout 
-	lda slotllen,x
-	jsr EHexout 
-	jsr ECrlfout
-#endif
-	clc
-	rts
-	.)
-
-/* truncate buffer xr to size a/y */
-&btrunc	.(
-	jsr bsplit
-	bcs oops
-	jmp bfree
-oops	rts
-	.)
-
-/* realloc buffer xr to size a/y */
-/* produce assemble errror
-&brealloc .(
-	.)
-*/
-
-/* get adress of buffer */
-&getbadr .(
-	lda slotladr,x
-	ldy slothadr,x
-	clc
-	rts
-	.)
-
-/* get length of buffer */
-&getblen .(
-	lda slotllen,x
-	ldy slothlen,x
-	clc
-	rts
-	.)
-
-/* get free buffer-ID slot */
-getbslot .(
-	ldx #0
-l0
-	clc
-	lda slotladr,x
-	ora slothadr,x
-	beq found
-	inx
-	cpx #MAXSLOT
-	bcc l0
-found
-	rts
-	.)
-
-/* check if two buffers (i.e. a/y plus following) can be merged */
-bmerge	.(
-	sta p
-	sty p+1
-	ldy #2
-	clc
-	lda (p),y
-	adc p
-	sta p3
-	iny
-	lda (p),y
-	adc p+1
-	sta p3+1
-	ldy #0
-	lda (p),y
-	cmp p3
-	bne nomerge
-	iny
-	lda (p),y
-	cmp p3+1
-	bne nomerge
-merge
-	ldy #2
-	clc
-	lda (p3),y
-	adc (p),y
-	sta (p),y
-	iny
-	lda (p3),y
-	adc (p),y
-	sta (p),y
-	ldy #0
-	lda (p3),y
-	sta (p),y
-	iny
-	lda (p3),y
-	sta (p),y
-nomerge
-	clc
-	rts
-	.)
-
-#ifdef DEBUGMEM
-&printmem .(
-DB("^m^jMemory Free List:^m^j")
-	lda flist
-	sta p
-	lda flist+1
-	sta p+1
-	ldx #STDERR
-loop
-	lda p+1
-	jsr EHexout
-	lda p
-	jsr EHexout
-	lda #"["
-	jsr Fputc
-	ldy #3
-	lda (p),y
-	jsr EHexout
-	dey
-	lda (p),y
-	jsr EHexout
-	DB("]->")
-	ldy #1
-	lda (p),y
-	jsr EHexout
-	dey
-	lda (p),y
-	jsr EHexout
-	jsr ECrlfout
-
-	ldy #1
-	lda (p),y
-	pha
-	dey
-	lda (p),y
-	sta p
-	pla
-	sta p+1
-	ora p
-	bne loop
-	rts
-	.)
-#endif
-
-	.)
+#include "slmem.a65"
 
 #print sysmem
 #print sysblk

@@ -1,0 +1,951 @@
+
+/****************************************************************************
+   
+    OS/A65 Version 1.3.11
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+/*
+ * This file is a TCP implementation for 6502 computer
+ *
+ * it exports:
+ *	tcpinit		- init TCP
+ *	tcploop		- must be called 
+ *	tcprx		- gets incoming packets
+ *
+ *	tcp_open	- (active) open TCP connection
+ *	tcp_listen	- (passive) open TCP connection
+ *	tcp_close	- close TCP connection
+ *	
+ */
+
+#define	DEBUGTCP
+
+#include "tcp.def"
+
+	.(
+
+tcbp	=syszp
+-syszp	+=2
+
+dlen	=sysmem
+-sysmem	+=2
+tcb	=sysmem
+-sysmem	+=MAXCONN*TCB_LEN
+phdr	=sysmem
+-sysmem	+=TPH_LEN
+
+&&tcpinit .(
+	ldx #0
+i1
+	jsr settcb
+	lda #TCP_CLOSED
+	ldy #TCB_STATE
+	sta (tcbp),y
+	inx
+	cpx #MAXCONN
+	bcc i1
+
+	jsr user_init
+
+	clc
+	rts
+	.)
+
+&&tcploop
+	rts
+
+&tcprx	.(
+
+state	=sysmem
+conn	=sysmem
+-sysmem	+=2
+
+	/* make IP header to TCP pseudo header */
+	lda #0
+	sta phdr+TH_PTCL-1
+	ldy #IPH_PROT
+	lda (ip),y
+	sta phdr+TH_PTCL
+	ldy #IPH_SRC
+c1	lda (ip),y
+	sta phdr-IPH_SRC,y
+	iny
+	cpy #IPH_TRG+4
+	bne c1
+	ldy #TH_TCPLEN
+	lda idlen+1
+	sta phdr,y
+	lda idlen
+	sta phdr+1,y
+
+	lda id
+	sec
+	sbc #TPH_LEN
+	sta id
+	lda id+1
+	sbc #0
+	sta id+1
+
+	lda idlen
+	clc
+	adc #TPH_LEN
+	sta idlen
+	lda idlen+1
+	adc #0
+	sta idlen+1
+
+	ldy #0
+c2	lda phdr,y
+	sta (id),y
+	iny
+	cpy #TPH_LEN
+	bne c2
+
+	lda #<id
+	ldy #>id
+	jsr checksum2
+
+#ifdef DEBUGTCP
+php
+pha
+txa
+pha
+DB("TCP Checksum=")
+pla
+tay
+jsr EHexout
+pla
+pha
+jsr EHexout
+jsr ECrlfout
+tya
+tax
+pla
+plp
+#endif
+	bcc tcpok
+
+        DB("Packet discarded: TCP checksum^m^j")
+        jmp discard
+
+tcpok	/* here we have a valid TCP packet in (id),0-idlen. */
+
+	ldy #TH_DOFFSET
+	lda (id),y
+	and #$f0
+	lsr
+	lsr
+	clc
+	adc #TPH_LEN
+	sta dlen
+	lda idlen
+	sec
+	sbc dlen
+	sta dlen
+	lda idlen+1
+	sbc #0
+	sta dlen+1
+		
+	/* find TCB for this packet */
+	.(
+lastfre	=sysmem
+-sysmem	+=1
+
+	ldx #<-1
+	stx lastfre
+next	inx
+	cpx #MAXCONN
+	bcc t1
+	ldx lastfre
+	jsr settcb
+	sec
+	jmp ret
+
+t1	jsr settcb
+
+	ldy #TCB_STATE
+	lda (tcbp),y
+	cmp #TCP_CLOSED
+	bne inuse
+	stx lastfre
+	beq next
+inuse	cmp #TCP_LISTEN
+	bne search		/* full search */
+
+	ldy #TH_TRGP
+iu2	lda (id),y
+	cmp (tcbp),y
+	bne next
+	iny
+	cpy #TH_TRGP+2
+	bcc iu2
+	; ok, we found one. now copy IP addresses and remote port
+	ldy #TH_SRCIP
+li1	lda (id),y
+	sta (tcbp),y
+	iny
+	cpy #TH_TRGP+2
+	bcc li1
+	jmp ok
+search	
+	ldy #TH_SRCP		/* TCB_HDR must be 0! */
+tl	lda (id),y
+	cmp (tcbp),y
+	bne next
+	iny
+	cpy #TH_TRGP+2
+	bcc tl
+
+	ldy #TH_SRCIP
+tm	lda (id),y
+	cmp (tcbp),y
+	bne next
+	iny
+	cpy #TH_TRGIP+4
+	bcc tm
+ok	clc
+ret	
+	.)
+
+	stx conn
+	ldy #TCB_STATE
+	lda (tcbp),y
+	sta state
+
+	lda state
+	asl
+	tay
+	lda stab+1,y
+	pha
+	lda stab,y
+	pha
+	rts
+
+stab	.word 	tcp_closed-1, tcp_listen-1, tcp_synrxd-1, tcp_syntxd-1
+	.word	tcp_estab-1, tcp_finw1-1,  tcp_finw2-1,  tcp_closew-1
+	.word   tcp_lastack-1, tcp_closing-1, tcp_timew-1
+
+tmp	=sysmem
+tmp2	=sysmem+1
+-sysmem	+=2
+
+tcp_closed .(
+	DB("TCP Closed^m^j")
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_RST
+	bne end
+	lda (id),y
+	and #THF_ACK
+	bne ackset
+
+	lda #0
+	ldy #TH_SEQ
+l0	sta (id),y
+	iny
+	cpy #TH_SEQ+4
+	bcc l0
+
+	clc
+	ldy #TH_SEQ+3
+	lda (id),y
+	adc dlen
+	ldy #TH_ACK+3
+	sta (id),y
+	ldy #TH_SEQ+2
+	lda (id),y
+	adc dlen+1
+	ldy #TH_ACK+2
+	sta (id),y
+	ldy #TH_SEQ+1
+	lda (id),y
+	adc #0
+	ldy #TH_ACK+1
+	sta (id),y
+	ldy #TH_SEQ
+	lda (id),y
+	adc #0
+	ldy #TH_ACK
+	sta (id),y
+
+	lda #THF_ACK + THF_RST
+	bne noack
+
+&send_rst
+&listen_ack
+ackset	ldy #TH_ACK
+	lda (id),y
+	ldy #TH_SEQ
+	sta (id),y
+	ldy #TH_ACK+1
+	lda (id),y
+	ldy #TH_SEQ+1
+	sta (id),y
+	ldy #TH_ACK+2
+	lda (id),y
+	ldy #TH_SEQ+2
+	sta (id),y
+	ldy #TH_ACK+3
+	lda (id),y
+	ldy #TH_SEQ+3
+	sta (id),y
+
+	lda #THF_RST
+noack
+	ldy #TH_FLAG
+	sta (id),y
+
+	jmp bangbuf
+	
+end	jmp discard
+	.)
+
+tcp_listen .(
+	DB("Listen^m^j")
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_RST
+	bne listen_rst
+
+	lda (id),y
+	and #THF_ACK
+	bne listen_ack
+
+	lda (id),y
+	and #THF_SYN
+	bne listen_syn
+	jmp nosyn
+&listen_syn
+	DB("Listen_syn^m^j")
+	jsr rxhdr
+	bcc okhdr
+	jmp disc
+okhdr
+	jsr hasdata
+	bcc dat
+	lda #0
+	tay
+	jsr chkbuf
+	bcc short
+
+	ldy #TH_FLAG
+	lda #THF_SYN + THF_ACK
+	sta (id),y
+	
+	jsr iniseq
+
+	ldy #TCB_STATE
+	lda #TCP_SYNRXD
+	sta (tcbp),y
+
+	jsr setack
+	jmp bangbuf
+
+&reset
+	DB("Reset rxd!^m^j")
+	ldy #TCB_STATE
+	lda #TCP_SYNRXD
+	sta (tcbp),y
+	jmp discard
+
+listen_rst
+	DB("Reset while listening^m^j")
+	jmp disc
+dat	DB("Syn packet has data^m^j")
+	jmp disc
+short	DB("Syn packet short^m^j")
+	jmp disc
+nosyn	DB("Listen but no Syn!^m^j")
+disc	jmp discard
+	.)
+
+tcp_synrxd .(
+	DB("SynRxd^m^j")
+
+	jsr rxhdr
+	bcs disc
+
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_RST
+	beq noreset	
+	jmp reset	/* TODO: if from active open, then close! */
+
+noreset
+	lda (id),y
+	and #THF_SYN
+	beq nosyn
+	; this is an error - abort anything
+	ldy #TCB_STATE
+	lda #TCP_CLOSED
+	sta (tcbp),y
+	jmp send_rst
+
+nosyn
+	lda (id),y
+	and #THF_ACK
+	beq noack
+
+	jsr checkack
+	bcs badack
+
+	jsr rxhdr
+	bcs disc
+	
+	ldy #TCB_STATE
+	lda #TCP_ESTAB
+	sta (tcbp),y
+
+disc	jmp discard
+
+noack	DB("No Ack^m^j")
+	jmp discard
+badack	DB("Bad Ack in packet^m^j")
+	jmp discard
+	.)
+
+tcp_syntxd .(
+	DB("SynTxd^m^j")
+	ldy #TH_FLAG
+	lda (id),y
+	pha
+
+	jsr rxhdr
+	bcs discp
+	pla
+	and #THF_SYN + THF_ACK
+	beq disc
+	cmp #THF_ACK
+	beq disc
+	pha		; now SYN is set
+
+	/* TODO: send ACK */
+
+	pla
+	cmp #THF_SYN
+	beq noack
+	; here SYN and ACK are set
+	lda #TCP_ESTAB
+	.byt $2c
+noack	lda #TCP_SYNRXD
+	ldy #TCB_STATE
+	sta (tcbp),y
+	rts
+
+discp	pla
+disc	jmp discard
+	.)
+
+tcp_estab
+tcp_finw1  tcp_finw2  tcp_closew tcp_lastack tcp_closing
+tcp_timew
+	DB("State not implemented^m^j")
+	jmp discard
+
+
+rxhdr	.(
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_SYN
+	beq nosyn
+
+	ldy #TH_SEQ+3
+	clc
+	lda (id),y
+	adc #1
+	sta (id),y
+	sta (tcbp),y
+	dey 
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+	dey
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+	dey
+	lda (id),y
+	adc #0
+	sta (id),y
+	sta (tcbp),y
+nosyn
+	ldy #TH_SEQ	/* we don't handle disordered packets - ignore them */
+seql	lda (id),y
+	cmp (tcbp),y
+	bne seqmismatch
+	iny
+	cpy #TH_SEQ+4
+	bcc seql
+
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_ACK
+	beq noack
+	ldy #TH_ACK	/* TODO: ack larger than send next ? -> send reset */
+ackl 	lda (id),y
+	sta (tcbp),y
+	iny
+	cpy #TH_ACK+4
+	bcc ackl	/* TODO: remove from retransmission queue */
+noack
+	jmp doopts
+
+seqmismatch
+	DB("Sequence number mismatch^m^j")
+	sec
+	rts
+	.)
+
+doopts	.(
+	ldy #TH_DOFFSET
+	lda (id),y
+	and #$f0
+	cmp #$60
+	bcc no_options
+	lsr
+	lsr
+	clc
+	adc #TH_SRCP
+	sta tmp2
+	ldy #TH_OPTIONS
+optloop
+	sty tmp
+	lda (id),y
+	beq no_options
+	iny
+	cmp #1
+	beq optloop
+	cmp #2
+	bne ill_options	; - ignore illegal options and all following
+	; max segment size
+	lda (id),y
+	pha		; option length
+	iny
+	lda (id),y	; high
+	tax
+	iny
+	lda (id),y	; low byte
+	cpx #>TCPSEG
+	bcc oklen
+	bne newlen
+	cmp #<TCPSEG
+	bcc oklen
+newlen	lda #<TCPSEG
+	ldx #>TCPSEG
+oklen 	ldy #TCB_MAXSEG
+	sta (tcbp),y
+	iny
+	txa
+	sta (tcbp),y
+	pla
+	clc
+	adc tmp
+	tay
+	jmp optloop
+
+ill_options
+	jsr EHexout
+	DB("Illegal header option ^m^j")
+	
+no_options
+	clc
+	rts
+	.)
+
+p2	=syszp
+-syszp	+=2
+d2len	=sysmem
+-sysmem	+=2
+
+hasdata	.(
+	ldy #TH_DOFFSET
+	lda (id),y
+	and #$f0
+	lsr
+	lsr
+	clc
+	adc #TPH_LEN
+	sec
+	sbc idlen
+	tax
+	lda #0
+	sbc idlen+1
+	;bcc yes
+	rts
+	.)
+
+chkbuf	.(
+	sta d2len
+	sty d2len+1
+	lda idlen
+	sec
+	sbc d2len
+	tax
+	lda idlen+1
+	sbc d2len+1
+	bne ret
+	cpx #TPH_LEN+24
+	;bcc no
+ret	rts
+	.)
+
+checkack .(
+	ldy #TH_ACK
+l1	lda (id),y
+	cmp (tcbp),y
+	bcc badack
+	iny
+	cpy #TH_ACK+4
+	bcc l1
+
+	lda tcbp
+	clc
+	adc #4
+	sta p2
+	lda tcbp+1
+	adc #0
+	sta p2+1
+
+	ldy #TH_ACK
+l2	lda (tcbp),y
+	cmp (id),y
+	bcc badack
+	iny
+	cpy #TH_ACK+4
+	bcc l2
+	clc
+	rts
+badack	sec
+	rts
+	.)
+
+
+iniseq	.(
+	ldy #TCB_SND_NXT
+	lda $dc07
+	sta (tcbp),y
+	iny
+	lda $dc06
+	sta (tcbp),y
+	iny
+	lda $dd07
+	sta (tcbp),y
+	iny
+	lda $dd06
+	sta (tcbp),y
+
+	sec
+	ldy #TCB_SND_NXT+3
+	lda (tcbp),y
+	sbc #1
+	ldy #TCB_SND_UNA+3
+	sta (tcbp),y
+	ldy #TH_SEQ+3
+	sta (id),y
+	ldy #TCB_SND_NXT+2
+	lda (tcbp),y
+	sbc #0
+	ldy #TCB_SND_UNA+2
+	sta (tcbp),y
+	ldy #TH_SEQ+2
+	sta (id),y
+	ldy #TCB_SND_NXT+1
+	lda (tcbp),y
+	sbc #0
+	ldy #TCB_SND_UNA+1
+	sta (tcbp),y
+	ldy #TH_SEQ+1
+	sta (id),y
+	ldy #TCB_SND_NXT
+	lda (tcbp),y
+	sbc #0
+	ldy #TCB_SND_UNA
+	sta (tcbp),y
+	ldy #TH_SEQ
+	sta (id),y
+	rts
+	.)
+
+bangbuf	.(
+
+	; first exchange port and IP addresses
+	lda id
+	clc
+	adc #TH_TRGP - TH_SRCP
+	sta p2
+	lda id+1
+	adc #0
+	sta p2+1
+
+	ldy #TH_SRCP
+l1	lda (id),y
+	tax
+	lda (p2),y
+	sta (id),y
+	txa
+	sta (p2),y
+	iny
+	cpy #TH_SRCP+2
+	bcc l1
+
+	lda id
+	clc
+	adc #TH_TRGIP - TH_SRCIP
+	sta p2
+	lda id+1
+	adc #0
+	sta p2+1
+
+	ldy #TH_SRCIP
+l2	lda (id),y
+	tax
+	lda (p2),y
+	sta (id),y
+	txa
+	sta (p2),y
+	iny
+	cpy #TH_SRCIP+4
+	bcc l2
+
+	; now check syn and add max seg size option if it's syn
+	ldy #TH_FLAG
+	lda (id),y
+	and #THF_SYN
+	beq nosyn
+	ldy #TH_OPTIONS
+	lda #2
+	sta (id),y
+	iny
+	lda #4
+	sta (id),y
+	iny
+	lda #>TCPWIN
+	sta (id),y
+	iny
+	lda #<TCPWIN
+	sta (id),y
+
+	lda #$60
+	.byt $2c
+nosyn	lda #$50
+	ldy #TH_DOFFSET
+	sta (id),y
+
+	lsr
+	lsr
+	ldy #TH_TCPLEN+1
+	sta (id),y
+	clc
+	adc #TPH_LEN
+	sta idlen
+	dey
+	lda #0
+	sta (id),y
+	adc #0
+	sta idlen+1
+
+	; this is for other packets also...
+	ldy #TH_WINDOW
+	lda #>TCPWIN
+	sta (id),y
+	iny
+	lda #<TCPWIN
+	sta (id),y
+
+	lda #0
+	ldy #TH_CHECK
+	sta (id),y
+	iny
+	sta (id),y
+	
+	lda #<id
+	ldy #>id
+	jsr checksum2
+	ldy #TH_CHECK+1
+	sta (id),y
+	dey
+	txa
+	sta (id),y
+
+	; make IP header from TCP pseudo header
+	; (i.e. copy the IP addresses to the right location and set protocol
+	; the rest is done in the IP layer
+
+	lda ip
+	clc
+	adc #TCP_OFFSET
+	tax
+	lda ip+1
+	adc #0
+	cmp id+1
+	bne move
+	cpx id
+	beq nomove
+move	DB("packet start mismatch!^m^j")
+	jmp discard
+nomove
+
+	lda idlen
+	sec
+	sbc #TPH_LEN
+	sta idlen
+	bcs l4
+	dec idlen+1
+l4
+
+	lda id
+	clc
+	adc #4
+	sta p2
+	lda id+1
+	adc #0
+	sta p2+1
+
+	ldy #TH_TRGIP+3
+l3	lda (id),y
+	tax
+	lda (p2),y
+	sta (id),y
+	txa
+	sta (p2),y
+	dey
+	cpy #<TH_SRCIP-1
+	bne l3
+
+	ldy #1		; IP_PROT
+	lda #6
+	sta (ip),y
+
+	jmp sendip
+	.)
+
+setack	.(
+	lda id
+	clc
+	adc #4
+	sta p2
+	lda id+1
+	adc #0
+	sta p2+1
+
+	ldy #TCB_RCV_NXT
+l5	lda (tcbp),y
+	sta (p2),y
+	iny
+	cpy #TCB_RCV_NXT+4
+	bcc l5
+	rts
+	.)
+
+	.)
+
+
+settcb	.(
+#if (TCB_LEN - 64)
+	lda #0
+	sta tcbp+1
+	txa
+	asl
+	rol tcbp+1
+	asl
+	rol tcbp+1
+	asl
+	rol tcbp+1
+	asl
+	rol tcbp+1
+	asl
+	rol tcbp+1
+	asl
+	rol tcbp+1
+	clc
+	adc #<tcb
+	sta tcbp
+	lda #>tcb
+	adc tcbp+1
+	sta tcbp+1
+	rts
+#else
+#warning TCB length not correct!
+#endif
+	.)
+
+freetcb	.(
+	ldx #0
+l0	jsr settcb
+	ldy #TCB_STATE
+	lda (tcbp),y
+	cmp #TCP_CLOSED
+	beq l1
+	inx
+	cpx #MAXCONN
+	bcc l0
+	sec
+	rts
+l1	clc
+	rts
+	.)
+
+/***************************************************************************
+ * Here follow the user routines (open, close etc)
+ */
+
+srv	=syszp
+-syszp	+=2
+tcbno	=sysmem
+-sysmem	+=1
+
+telnet_srv .byte 0,0,0,0, 0,0, 23,0
+
++user_init .(
+	lda #<telnet_srv
+	ldy #>telnet_srv
+	jsr tcp_listen
+	rts
+	.)
+
++tcp_listen .(
+	sta srv
+	sty srv+1
+	jsr freetcb
+	bcs notcb
+
+	ldy #SRV_LPORT
+	lda (srv),y
+	tax
+	iny
+	lda (srv),y
+	ldy #TCB_TRGP
+	sta (tcbp),y
+	iny
+	txa
+	sta (tcbp),y
+	
+	ldy #TCB_STATE
+	lda #TCP_LISTEN
+	sta (tcbp),y
+	clc
+	;rts
+notcb	rts
+	.)
+
+	.)
