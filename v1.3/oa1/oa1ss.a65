@@ -73,8 +73,6 @@ blocks    =sysblk
 
           jsr setstream
           bcs putnostr3
-          lda STRM+S_CNTR,x
-          beq snul3            ; NUL-Status dann ende
 
 	  lda STRM+S_II,x
 	  cmp STRM+S_IO,x

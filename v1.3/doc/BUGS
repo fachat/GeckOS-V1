@@ -1,0 +1,9 @@
+
+- serial line drivers ignore handshake value (rts/cts vs. xon/xoff)
+
+- serial line (UART driver) interrupts increase cursor speed...
+
+- dropped characters above 2400 baud with FIFO still seems strange,
+  esp with a 16550A!
+
+

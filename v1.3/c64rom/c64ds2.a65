@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.8
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -22,21 +22,19 @@
 ****************************************************************************/
 
 /*
- * This is a ACIA 6551 serial line driver for CS/A65. It uses the 
- * hardware installed in my personal C64. The 6551 is at address $d600.
+ * This is an UART 16550A serial line driver for CS/A65.
+ * It uses the hardware installed in my personal C64. The
+ * 16550A is mapped at $d600, above the SID.
  *
- * The ACIA 6551 has a real bad 'feature'. The RTS/CTS lines are not
- * independent from the transmitter and receiver. Instead, making
- * RTS high automatically disables receiver _and_ transmitter!
- * Also an incoming CTS high immediately disables the transmitter.
- * That's why I use the DSR input for the CTS modem line. This line
- * can be checked independently.
+ * The 16550 is not really an easy chip, but it has 16 byte
+ * input and output FIFO buffers, which allows much higher
+ * interrupt latencies.
  */
 
-#ifdef C64ACIA
-#define	ACIA	C64ACIA
+#ifdef C64UART
+#define	UART	C64UART
 #else
-#define ACIA	$d600
+#define UART	$d600
 #endif
 
 #define	Anzdev	1
@@ -54,6 +52,13 @@
  *	  	7 : 1= we are receiving
  *
  */
+
+/* 
+ * 16550 divisor values for BAUD rates ?, 50, 75, 110, 134.5, 150, 
+ * 300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 19200
+ */
+divisor	.word 	-1, 2304, 1536, 1047, 857, 768, 384, 192, 96
+	.word	64, 48, 32, 24, 16, 12, 6
 
 dev       =sysmem
 div       =sysmem+1
@@ -80,23 +85,39 @@ prgok     pla
           beq devirq
           jmp others
 
+/*****************************************************************/
+
 devini    lda #0
           sta status,x
           sta instr,x
           sta outstr,x
 
-          STA ACIA+ACIA_SR		; programmed reset
-          LDA #%00011000		; 1200 BAUD, 1 stop bit, 8 data bits
-          STA ACIA+ACIA_CTRL
-          cmp ACIA+ACIA_CTRL
-          bne devx
-          LDA #%00000101		; no parity, normal receiver mode,
-					; RTS low, Tx interrupt enabled
-          STA ACIA+ACIA_CMD
-          cmp ACIA+ACIA_CMD
-          bne devx
-          LDA ACIA+ACIA_SR		; clear interrupt
+	lda #%10101010
+	sta UART+UART_SCR
+	cmp UART+UART_SCR
+	bne devx
+	lsr
+	sta UART+UART_SCR
+	cmp UART+UART_SCR
+	bne devx
 
+ 	lda #7				; no FIFO enable and clear FIFOs, 
+	sta UART+UART_FCR		; trigger at 1 byte
+	lda #0
+	sta UART+UART_IER		; polled mode (so far) 
+	sta UART+UART_MCR		; reset DTR, RTS
+	sta UART+UART_LCR
+
+	lda #%10000000
+	sta UART+UART_LCR
+	ldx #10*2			; 2400 BAUD
+	lda divisor,x
+	sta UART+UART_DLL
+	lda divisor+1,x
+	sta UART+UART_DLH
+	lda #%00000011			; 8N1
+	sta UART+UART_LCR
+ 
           clc
           rts
 
@@ -107,28 +128,46 @@ devx      lda status,x
           sec
           rts
           
+/*****************************************************************/
+
 devirq    
           .(
-          lda ACIA+ACIA_SR
-          bpl irqend		; not this ACIA
-          tay
+	lda UART+UART_IIR
+	lsr
+	bcc intr
+
+	lda UART+UART_LSR
+	and #%00100000
+	beq notxpoll		; check if tx FIFO empty
+	jsr tx2
+notxpoll
+	jmp irqend		; not this one
+
+intr
+	and #%00000111		; interrupt mask
+	cmp #2
+	beq rx
+	cmp #6
+	bne tx
+rx
           bit status		; check if receiving
-          bpl tx		; no -> tx
-          and #%00001000	; Rx data register full?
-          beq nobyt		; no -> nobyt
+          bmi rxok		; no -> tx
+	lda UART+UART_RXTX
+	jmp devirq
+rxok
+	lda UART+UART_RXTX
           ldx outstr
-          lda ACIA
           jsr PUTC
           bcs test
 
 nobyt     ldx outstr
           lda #SC_STAT
           jsr STRCMD
-test      bcc tx
+test      bcc devirq
           cmp #E_NUL
           bne tstwater
           jsr rxoff
-          jmp tx
+          jmp devirq
 tstwater  cmp #E_SEMPTY
           beq wl
           tax
@@ -144,63 +183,87 @@ wh      ldx #0
 	jsr rtshi
           jmp tx         ; unbedingt
 twl       cmp #E_SLWM
-          bne tx
+          bne devirq
 wl      ldx #0  
 	jsr rtslo
 
-tx        bit status
-          bvc irqhs
-          tya
-	and #%00010000		; transmit data register empty?
-	beq irqhs		; no then -> irqhs
+	;-----------------------------------------------
+tx       
+	cmp #1
+	bne irqend
+	jsr tx2
+irqok     
+	lda #E_OK		; irq source removed
+	rts
+irqend  lda #E_NOIRQ		; no irq source found
+	rts
 
-	lda #32
+tx2 	.(
 	bit status
-	bne endsend		; do not send any more to make RTS high.
+        bvc txrt		; reading IIR should clear this line
 
-	tya
-	and #%01000000		; DSR high?
-	bne irqhs		; -> irqhs
+	lda UART+UART_MSR
+	and #%00110000
+	cmp #%00110000		; cts or dsr inactive
+	bne txrt
 
-          ldx instr		; send new data byte
-          jsr GETC
-          bcs test2
-          sta ACIA
-          bcc irqhs
-test2     cmp #E_EOF
-          bne irqhs
-          jsr txoff
+	ldy #15			
+txloop
+        ldx instr		; send new data byte
+        jsr GETC
+        bcs test2
+        sta UART+UART_RXTX
+	dey
+	bne txloop		; fill up FIFO
+        bcc txrt
 
-irqhs     lda ACIA+ACIA_SR
-	  lda #E_OK		; irq source removed
-	  rts
-irqend    lda #E_NOIRQ		; no irq source found
-	  rts
-
-endsend
-	lda ACIA+ACIA_CMD
-	and #%11110011
-	sta ACIA+ACIA_CMD
-	jmp irqhs
+test2   cmp #E_EOF
+        bne txrt
+        jsr txoff
+txrt	rts
+	.)
 
           .)
 
+/*****************************************************************/
+
+dtrhi
+	lda UART+UART_MCR
+	and #%11111110
+	sta UART+UART_MCR
+	lda #0
+	sta UART+UART_IER
+	rts
+
+dtrlo
+	lda UART+UART_MCR
+	ora #%00000001
+	sta UART+UART_MCR
+	lda #3
+	sta UART+UART_IER
+	rts
+
 rtshi
+	lda UART+UART_MCR
+	and #%11111101
+	sta UART+UART_MCR
 	lda status,x
 	ora #%00100000
 	sta status,x
 	rts
 
 rtslo
-	lda ACIA+ACIA_CMD
-	ora #%00000100
-	sta ACIA+ACIA_CMD
+	lda UART+UART_MCR
+	ora #%00000010
+	sta UART+UART_MCR
 	lda status,x
 	and #%11011111
 	sta status,x
 	rts
 
-others    cmp #DC_GS
+/*****************************************************************/
+
+others    cmp #DC_GS		; set stream to get data from
           bne o1
           lda status,x
           and #DC_SW_TX
@@ -209,7 +272,7 @@ others    cmp #DC_GS
           sta instr,x
           jmp ok
 devonx    jmp devon
-o1        cmp #DC_PS
+o1        cmp #DC_PS		; set stream to put data to
           bne o2
           lda status,x
           and #DC_SW_RX
@@ -217,23 +280,26 @@ o1        cmp #DC_PS
           tya
           sta outstr,x
 okx       jmp ok
-o2        cmp #DC_RX_ON
+o2        cmp #DC_RX_ON		; switch receiver on
           bne o3
 	jsr rtslo
+	jsr dtrlo
           lda #DC_SW_RX
           bne o2a
-o3        cmp #DC_TX_ON
+o3        cmp #DC_TX_ON		; switch sender on
           bne o4
+	jsr dtrlo
           lda #DC_SW_TX
 o2a       ora status,x
           sta status,x
           bne okx
-o4        cmp #DC_RX_OFF
+o4        cmp #DC_RX_OFF	; switch receiver off, send eof to stream
           bne o5
 rxoff     ldx dev
           lda status,x
           and #DC_SW_RX
           beq devoffx
+	jsr rtshi
           lda outstr,x
           tax
           lda #SC_EOF
@@ -242,12 +308,11 @@ rxoff     ldx dev
           lda status,x
           and #255-DC_SW_RX
           sta status,x
+	  jmp checkdtr
 
-rx1off    ;jsr rts1hi
-          ;bcc okx
-	jmp okx
 devoffx   jmp  devoff
-o5        cmp #DC_TX_OFF
+
+o5        cmp #DC_TX_OFF	; switch sender off, send nul to stream
           bne o6
 txoff     ldx dev
           lda status,x
@@ -261,8 +326,13 @@ txoff     ldx dev
           lda status,x
           and #255-DC_SW_TX
           sta status,x
-          jmp ok
-o6        cmp #DC_HS
+checkdtr
+	and #DC_SW_TX+DC_SW_RX
+	bne active
+	jsr dtrhi
+active 	jmp ok
+
+o6        cmp #DC_HS		; set handshake -- currently ignored (TODO)
           bne o6a
           lda status,x
           and #255-1
@@ -272,21 +342,31 @@ o6        cmp #DC_HS
           ora status,x
           sta status,x
           jmp ok
-o6a       cmp #DC_SPD
+
+o6a       cmp #DC_SPD		; set speed
           bne o7
           tya
           and #%00001111
-          sta div
+	  asl
+          tax
+	  beq ok
 
-          lda ACIA+ACIA_CTRL
-          and #%11110000
-          ora div
-          sta ACIA+ACIA_CTRL
+	lda UART+UART_LCR
+	ora #$80
+	sta UART+UART_LCR
+  	lda divisor,x
+	sta UART+UART_DLL
+	lda divisor+1,x
+	sta UART+UART_DLH
+	lda UART+UART_LCR
+	and #$7f
+	sta UART+UART_LCR
+
           jmp ok
 
-o7        cmp #DC_ST
+o7        cmp #DC_ST		; get status...
           beq ok 
-          cmp #DC_EXIT
+          cmp #DC_EXIT		; disable everything
           bne onotimp
           jsr rxoff
           jsr txoff
@@ -294,7 +374,6 @@ o7        cmp #DC_ST
           lda status,x
           ora #2
           sta status,x
-          sta ACIA+ACIA_SR	; programmed reset
 	  bne ok
           
 ok        lda #E_OK
