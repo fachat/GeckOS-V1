@@ -231,8 +231,8 @@
    - The WWW server only understands "GET filename" requests. No "http://"
      or host prefixes are allowed. At least with Netscape it seems to work.
 
-   - The WWW server doesn't cope with multiple requests at the same time 
-     (like images in a page itself...) This is a real bug.
+   - Connection Aborts can really confuse the thing. This has improved,
+     but there are still bugs...
 
    - The implementation is bloated, and horribly slow.
 

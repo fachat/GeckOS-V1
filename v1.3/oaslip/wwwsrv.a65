@@ -31,7 +31,7 @@
 
 #define	WS_FREE		0
 #define	WS_RXD		1	/* filename received */
-#define	WS_FSENT	2	/* filename send to filesystem */
+#define	WS_FSENT	2	/* filename sent to filesystem */
 #define	WS_WR		3	/* get data and send it */
 #define	WS_WR_WAIT	4	/* send prepared data block */
 #define	WS_WR_WEOF	5	/* send last data block */
@@ -642,6 +642,7 @@ err	ldy #TCB_WS
 	sta (tcbp),y
 
 	;ldx conn
+	lda #TE_FIN
 	jsr tcp_sig_close
 loop_closed
 loop_free rts
@@ -653,6 +654,28 @@ DB("wwwsrv_signal = "):pla:pha:jsr EHexout
 DB(", tcbp="):lda tcbp+1:jsr EHexout:lda tcbp:jsr EHexout:jsr ECrlfout
 pla
 inc $d020
+	cmp #TE_CLEANUP
+	bne ende
+	ldy #TCB_WS
+	lda (tcbp),y
+	cmp #WS_FSENT
+	bne nosent
+#ifdef NOMMU
+	ldx #SEM_SENDBUF
+	jsr VSEM
+#endif
+	jmp ende
+nosent	cmp #WS_WR_WAIT
+	beq wait
+	cmp #WS_WR_WEOF
+	bne nowait
+wait	ldy #TCB_WSLOT
+	lda (tcbp),y
+	tax
+	jsr bfree
+
+nowait	lda #TE_CLEANUP
+ende
 	jmp tcp_sig_close
 	.)
 

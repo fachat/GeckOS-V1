@@ -532,7 +532,8 @@ retnomem2 bcs retnomem
 	lda task
 	sta fstask,y
 
-#ifdef NOMMU
+/* A filesystem is _never_ allowed to release the PCBUF during OPEN etc! */
+#if 0 /*def NOMMU*/ 
 	ldx #SEM_SENDBUF
 	jsr VSEM
 /*DB("free'd SEM_SENDBUF^m^j")*/
@@ -661,7 +662,7 @@ lda status,x:jsr EHexout:jsr ECrlfout
 	jmp disc
 noillreply
 
-#ifdef NOMMU
+#if 0 /*def NOMMU*/
 	sec
 	ldx #SEM_SENDBUF
 	jsr PSEM

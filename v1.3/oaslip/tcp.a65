@@ -186,13 +186,13 @@ nomsl
 	jsr retransmit
 noretrans
 noti	
-
 	ldy #TCB_STATE
 	lda (tcbp),y
 	cmp #TCP_ESTAB
 	bne next
 
 	ldy #TCB_FLAG
+	lda (tcbp),y
 	and #1
 	beq noqueuedfin
 
@@ -349,7 +349,39 @@ looktcb
 	jmp tcp_closed
 found
 	stx conn
-
+#if 1
+	DB("rP=")
+	ldy #TH_SRCP
+	lda (pd),y
+	jsr EHexout
+	iny
+	lda (pd),y
+	jsr EHexout
+	DB(" tp=")
+	lda tcbp+1
+	jsr EHexout
+	lda tcbp
+	jsr EHexout
+	DB(" s=")
+	ldy #TH_SEQ+2
+	lda (pd),y
+	jsr EHexout
+	iny
+	lda (pd),y
+	jsr EHexout
+	DB(" a=")
+	ldy #TH_ACK+2
+	lda (pd),y
+	jsr EHexout
+	iny
+	lda (pd),y
+	jsr EHexout
+	DB(" f=")
+	ldy #TH_FLAG
+	lda (pd),y
+	jsr EHexout
+	jsr ECrlfout
+#endif
 	ldy #TCB_STATE
 	lda (tcbp),y
 	sta state
@@ -524,7 +556,7 @@ seqok	/* second, check the RST bit */
 	cmp #TCP_SYNRXD
 	bne seq1
 
-	/* if from active open, then close! */
+	/* TODO: if from active open, then close! */
 	DB("Reset rxd!^m^j")
 	ldy #TCB_STATE
 	lda #TCP_SYNRXD
@@ -543,8 +575,9 @@ seq1	cmp #TCP_LASTACK
 	jsr tdisc
 
 	/* signal_user may use q* variables! */
-	lda #TE_RESET1
-	jmp signal_user
+	;lda #TE_RESET1
+	;jmp signal_user
+	jmp tclose
 
 seq2 	jsr tdisc
 	jmp tclose
@@ -563,8 +596,9 @@ noreset	/* third, check security and precedence... */
 	/* flush everything, close */
 	jsr send_rst
 
-	lda #TE_RESET2
-	jmp signal_user
+	;lda #TE_RESET2
+	;jmp signal_user
+	jmp tclose
 
 nosyn	/* fifth, check the ack bit */
 	lda seg_flag
@@ -807,8 +841,9 @@ noack
 	beq rstack
 
 	jsr tdisc
-	lda #TE_RESET3
-	jmp signal_user
+	;lda #TE_RESET3
+	;jmp signal_user
+	jmp tclose
 
 	/* TODO: close? or define that user signal routine should do that... */
 rstack	jmp tdisc
@@ -873,10 +908,11 @@ nosyn	jmp tdisc
 
 ackxmit	.(
 
-#if 0
+#if 1
 DB("ackxmit:")
-.(:ldy #TCB_SND_UNA: x1 lda (tcbp),y: jsr EHexout: iny: cpy #TCB_SND_UNA+4:bcc x1: .)
+.(:ldy #TCB_SND_UNA+2: x1 lda (tcbp),y: jsr EHexout: iny: cpy #TCB_SND_UNA+4:bcc x1: .)
 lda #":":jsr ECout
+jsr ECrlfout
 #endif
 	ldy #TCB_NTXBUF
 	lda (tcbp),y
@@ -1461,12 +1497,14 @@ l1	lda (tcbp),y
 	jsr balloc
 	bcc ok
 	DB("Couldn't alloc send_* buffer!^m^j")
+	sec
 	rts
 ok	;stx qslot
 	lda #TCP_OFFSET
 	jsr getpinfo
 	bcc piok
 	DB("getpi error in send_*^m^j")
+	sec
 	rts
 piok
 #if 0
@@ -1500,10 +1538,15 @@ nofin
 	.)
 
 &tclose	.(
+	/* ok, clean up connection specific stuff */
+	lda #TE_CLEANUP
+	jsr signal_user
+
 	ldy #TCB_STATE
 	lda #TCP_CLOSED
 	sta (tcbp),y
 
+&&flushqueue
 	ldy #TCB_NTXBUF
 	lda (tcbp),y
 	beq end
@@ -1511,7 +1554,7 @@ nofin
 	adc #TCB_TXBUF-1
 	sta tmp
 l1	ldy tmp
-	cpy #TCB_TXBUF-1
+	cpy #TCB_TXBUF		; -1
 	bcc end
 
 	lda (tcbp),y
@@ -1520,7 +1563,10 @@ l1	ldy tmp
 	dec tmp
 	jmp l1
 
-end	rts
+end	ldy #TCB_NTXBUF
+	lda #0
+	sta (tcbp),y
+	rts
 	.)
 
 
