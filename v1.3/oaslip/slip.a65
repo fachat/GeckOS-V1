@@ -37,6 +37,11 @@
 
 #ifndef ROM
 
+#define	DEBUG
+
+#define	MY_IP		192,168,0,13
+#define	MAXOQUEUE	4
+
 #define	C64
 
 #ifdef C64
@@ -48,7 +53,11 @@
 #include "oa1fs.def"
 #include "stdio.a65"
 
-#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr Txtout:.):
+#ifdef DEBUG
+#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr ETxtout:.):
+#else
+#define	DB(a)
+#endif
 
 #define	MAXSLOT	8
 #define	IPBUFFER 12*256		/* must be within one (4k) page! */
@@ -86,6 +95,11 @@ PRGSTART  =$2000
 #define	IPH_SRC		12
 #define	IPH_TRG		16
 
+#define	ICMP_TYPE	0
+#define	ICMP_CODE	1
+#define	ICMP_CSUM	2
+
+/**********************************************************************/
 
           .(
 #ifdef ROM
@@ -146,27 +160,72 @@ PRG	.(
 	jsr binit
 	bcs exit
 DB("^m^jbinit ok^m^j")
+	jsr oinit
+	bcs exit
+DB("^m^joinit ok^m^j")
 	jsr startin
 DB("startin ok^m^j")
+#ifdef DEBUG
+jsr printmem
+#endif
 	bcc doloop
 exit	rts
+
+MyIP	.byt MY_IP
 
 doloop
 	jsr loopin
 	jsr SUSPEND
 	jmp doloop
 
+/******************** output loop ***********************/
+	.(
+
+onslot	=sysmem
+oslot	=sysmem+1
+-sysmem	+=MAXOQUEUE+1
+
+&oinit	.(
+	lda #0
+	sta onslot
+	clc
+	rts
+	.)
+
+&queueslot .(	; queue slot XR for output
+	ldy onslot
+	cpy #MAXOQUEUE
+	bcs drop
+	txa
+	sta oslot,y
+	inc onslot
+	rts
+drop
+	DB("^m^jPacket dropped due to full queue^m^j")
+	jsr bfree
+	rts
+	.)
+
+	.)
+
+/******************** input loop ************************/
 	.(
 
 islot	=sysmem
 ist	=sysmem+1	; 0=send data, $80= escaped
 ilen	=sysmem+2
--sysmem	+=4
+idlen	=sysmem+4
+ihl	=sysmem+6
+-sysmem	+=7
 ip	=syszp
-iend	=syszp+2
--syszp	+=4
+id	=syszp+2
+iend	=syszp+4
+-syszp	+=6
 
 &startin
+#ifdef DEBUG
+jsr printmem
+#endif
 	lda #<MTU
 	ldy #>MTU
 	jsr balloc
@@ -234,8 +293,14 @@ gotpacket
 	ldx islot
 	lda ip
 	sta iend
-	lda ip+1
-	sta iend+1
+	ldy ip+1
+	sty iend+1
+	and #1
+	beq even	; fill up with nullbyte if length is odd
+	tay
+	lda #0
+	sta (ip),y
+even
 	jsr getbadr
 	sta ip
 	sty ip+1
@@ -244,17 +309,17 @@ gotpacket
 	cpy iend+1
 	beq discard	; zero length packet received
 ok
-	;lda iend
-	;ldy iend+1
-	;jsr btrunc	; truncate buffer to needed size
 
+#ifdef DEBUG
 	/* so what now? */
+DB("^m^jReceived Packet:^m^j")
 	jsr printpacket
 
 DB("^m^jip=")
-lda ip+1:jsr Hexout:lda ip:jsr Hexout
+lda ip+1:jsr EHexout:lda ip:jsr EHexout
 DB("^m^jiend=")
-lda iend+1:jsr Hexout:lda iend:jsr Hexout
+lda iend+1:jsr EHexout:lda iend:jsr EHexout
+#endif
 
 	/* sanity checks */
 	/* header length */
@@ -265,12 +330,13 @@ lda iend+1:jsr Hexout:lda iend:jsr Hexout
 	lda (ip),y
 	sta ilen
 
+#ifdef DEBUG
 DB("^m^jiph->len=")
 lda ilen+1
-jsr Hexout
+jsr EHexout
 lda ilen
-jsr Hexout
-
+jsr EHexout
+#endif
 	clc
 	lda ilen
 	adc ip
@@ -282,95 +348,263 @@ jsr Hexout
 	lda ilen+1
 	adc ip+1
 	cmp iend+1
-	bne discardlen
-discp	bne discardlenp
-
+	beq lenok
+	php
+discp	plp
+	jmp discardlen
+lenok
 	/* header checksum */
-	ldx islot
+	ldy #IPH_VER
+	lda (ip),y
+	and #$0f
+	asl
+
+	pha
+	asl
+	sta ihl
+	clc
+	adc ip
+	sta id		; start of datagram data
+	lda ip+1
+	adc #0
+	sta id+1
+
+	lda ilen
+	sec
+	sbc ihl
+	sta idlen
+	lda ilen+1
+	sbc #0
+	sta idlen+1
+	pla
+
+	tax
+	lda ip
+	ldy ip+1
 	jsr checksum
 
+#ifdef DEBUG
+php
 pha
 txa
 pha
 DB("^m^jHeader Checksum=")
 pla
 tay
-jsr Hexout
+jsr EHexout
 pla
 pha
-jsr Hexout
+jsr EHexout
+jsr ECrlfout
 tya
 tax
 pla
+plp
+#endif
 
-	cmp #<$fffd
-	bne discardcs
-	cpx #>$fffd
-	bne discardcs
+	bcs discardcs
 
-	/* TODO: check my IP address */
+	/* check my IP address */
+	ldy #IPH_TRG
+l2 	lda MyIP-IPH_TRG,y
+	cmp (ip),y
+	bne discardip
+	iny
+	cpy #IPH_TRG+4
+	bcc l2
 
-	ldy #IPH_VER
-	and #$0f
-	asl
-	asl
-	tax			; length of IP header
+	/**** so that packet is valid -> process it ****/
 
 	ldy #IPH_PROT
 	lda (ip),y
 
 	cmp #1
-	beq icmp
+	bne no
+	jmp icmp
+no
+	jmp discard
 
-disc	jmp discard
-
-discardlenp
-	plp
 discardlen
 	DB("^m^jPacket discarded due to length mismatch^m^j")
 	jmp discard
 discardcs
 	DB("^m^jPacket discarded due to checksum^m^j")
+disc	jmp discard
+discardip
+	DB("^m^jPacket discarded due to wrong IP^m^j")
 	jmp discard
 
+icmp	.(
+	lda ihl
+#ifdef DEBUG
+pha
+jsr EHexout
+pla
+#endif
+	clc 
+	adc ip
+	pha
+#ifdef DEBUG
+jsr EHexout
+#endif
+	lda ip+1
+	adc #0
+#ifdef DEBUG
+pha
+jsr EHexout
+pla
+#endif
+	tay
+	lda ilen		; well, just take the low byte (TODO)
+	clc
+	adc ihl
+	clc
+	adc #1
+	lsr
+#ifdef DEBUG
+pha
+jsr EHexout
+pla
+#endif
+	tax
+	pla
+	jsr checksum
 
-icmp	txa
-	tay			; first byte of icmp header
-	lda (ip),y		; icmp type
+#ifdef DEBUG
+php
+pha
+txa
+pha
+DB("^m^jICMP Checksum=")
+pla
+tay
+jsr EHexout
+pla
+pha
+jsr EHexout
+tya
+tax
+pla
+plp
+#endif
+	bcc icmpok
+	jmp discardcs
+icmpok
+	ldy #0
+	lda (id),y		; icmp type
 	cmp #8			; echo message
-	bne disc
+	beq echo
+	jmp discard
+echo
+	/* ECHO Message */
 				; modify message to echo reply message
 	lda #0			; icmp echo reply
+	sta (id),y
+
+	ldy #IPH_CSUM
+	sta (ip),y
+	iny
+	sta (ip),y
+	ldy #IPH_TTL
+	lda #64
 	sta (ip),y
 
+	ldy #IPH_SRC
+	lda (ip),y
+	ldy #IPH_TRG
+	sta (ip),y
+	ldy #IPH_SRC+1
+	lda (ip),y
+	ldy #IPH_TRG+1
+	sta (ip),y
+	ldy #IPH_SRC+2
+	lda (ip),y
+	ldy #IPH_TRG+2
+	sta (ip),y
+	ldy #IPH_SRC+3
+	lda (ip),y
+	ldy #IPH_TRG+3
+	sta (ip),y
+
+	ldy #IPH_SRC
+l0	lda MyIP-IPH_SRC,y
+	sta (ip),y
+	iny
+	cpy #IPH_SRC+4
+	bcc l0
+
+	lda ihl
+	lsr
+	tax
+	lda ip
+	ldy ip+1
+	jsr checksum
+	ldy #IPH_CSUM+1
+	sta (ip),y
+	dey
+	txa
+	sta (ip),y
+
+	ldy #ICMP_CSUM
+	lda #0
+	sta (id),y
+	iny
+	sta (id),y
+
+	lda idlen
+	lsr
+	tax
+	lda id
+	ldy id+1
+	jsr checksum
+
+	ldy #ICMP_CSUM+1
+	sta (id),y
+	dey
+	txa
+	sta (id),y
+
+#ifdef DEBUG
+DB("^m^jSend packet:^m^j")
+jsr printpacket
+#endif
+tsx
+txa
+jsr EHexout
+	ldx islot
+	lda ilen
+	ldy ilen+1
+	jsr btrunc
+
+	ldx islot
+	jsr queueslot
+	jmp startin
 	rts
+	.)
 
 	.)
 
 	/* computes IP header checksum and returns it in a/x */
-	/* TODO: make address + # of 16 bit words parameter */
+	/* TODO: make address (a/y) + # of 16 bit words parameter (x) */
 checksum .(
 
 tmp	=sysmem
-len	=sysmem+1
--sysmem	+=2
+len	=sysmem+3
+-sysmem	+=5
 p	=syszp
 -syszp	+=2
 
-	jsr getbadr
 	sta p
 	sty p+1
 
-	ldy #IPH_VER
-	lda (p),y
-	and #$0f
-	asl
+	txa
 	asl
 	sta len		; length in byte
 
-	ldx #0
-	txa
+	lda #0
 	sta tmp
+	sta tmp+1
+	sta tmp+2
 	ldy #0
 loop	
 	iny
@@ -378,45 +612,155 @@ loop
 	clc
 	adc (p),y
 	sta tmp
-	txa
+	lda tmp+1
 	dey
 	adc (p),y
-	tax
-
+	sta tmp+1
+	bcc l0
+	inc tmp+2
+l0
 	iny
 	iny
+	bne l1
+	inc p+1
+l1
 	cpy len
 	bcc loop
 
 	lda tmp
+	clc
+	adc tmp+2
+	pha
+	lda tmp+1
+	adc #0
+	eor #$ff
+	tax
+	pla
+	eor #$ff
+	bne err
+	cpx #0
+	bne err
+	clc
+	rts
+err	sec
 	rts
 	.)
 
 printpacket .(
-	lda #<initxt
-	ldy #>initxt
-	jsr Txtout
 	ldy #0
 l0
 	lda (ip),y
-	jsr Hexout
+	jsr EHexout
 	lda #" "
-	jsr Putc
+	ldx #STDERR
+	jsr Fputc
 	iny
 	cpy iend
 	beq lend
 	tya
 	and #7
 	bne l0
-	jsr Crlfout
+	jsr ECrlfout
 	jmp l0
 lend
+	DB("^m^jHeader Checksum")
+	ldy #IPH_VER
+	lda (ip),y
+	and #$0f
+	asl
+	tax
+	lda ip
+	ldy ip+1
+	jsr checksum
+	pha
+	txa
+	jsr EHexout
+	pla
+	jsr EHexout
+
+	DB("^m^jData Checksum")
+	lda idlen
+	lsr
+	tax
+	lda id
+	ldy id+1
+	jsr checksum
+	pha
+	txa
+	jsr EHexout
+	pla
+	jsr EHexout
+
+	jsr ECrlfout
 	clc
 	rts
 
-initxt	.byt "^m^jReceived Packet:^m^j",0
 
 	.)
+
+	.)
+
+/**********************************************************************/
+/* Output on STDERR			 			      */
+
+	.(
+XR	=sysmem
+-sysmem	+=1
+
+&ECrlfout .(
+	stx XR
+	ldx #STDERR
+	lda #13
+	jsr Fputc
+	lda #10
+	jsr Fputc
+	ldx XR
+	rts
+	.)
+
+&EHexout  .(
+	  stx XR
+          pha
+          lsr
+          lsr
+          lsr
+          lsr
+          jsr nibout
+          pla
+          and #$0f
+nibout    ldx #STDERR
+	  clc
+          adc #"0"
+          cmp #"9"+1
+          bcc nibok
+          adc #6
+nibok     jsr Fputc
+	  ldx XR
+	  rts
+          .)
+
+&ETxtout
+	  .(
+tp        =syszp
+-syszp	  +=2
+
+          sta tp
+          sty tp+1
+	  stx XR
+	  ldx #STDERR
+          ldy #0
+tol       lda (tp),y
+          beq tole
+          jsr Fputc
+          iny
+          bne tol
+          inc tp+1
+          bne tol
+tole
+	  ldx XR
+          clc
+          rts
+          .)
 
 	.)
 
@@ -426,6 +770,9 @@ initxt	.byt "^m^jReceived Packet:^m^j",0
 /* 	binit							      */
 /* 	balloc, bfree, btrunc, bsplit, brealloc			      */
 /*	getbadr, getblen					      */
+
+#define	MINBUF	8
+#define	MINMASK	%11111000
 
 	.(
 
@@ -478,19 +825,38 @@ l0	sta slotladr,y
 &balloc	.(
 	/* walk along freelist, and take first matching buffer 
 	   length is made a multiple of 8 (for freelist connectors */
+
 	pha
 	jsr getbslot
-	bcs oops
-	stx slot
 	pla
+	bcc gotslot
+	lda #E_NOMEM
+	rts
+gotslot
+	stx slot
 
-	adc #7
-	and #%11111000
+	adc #MINBUF-1
+	and #MINMASK
 	sta slotllen,x
 	tya
 	adc #0
 	sta slothlen,x
 
+#ifdef DEBUG
+DB("^m^jalloc(")
+txa
+jsr EHexout
+lda slothlen,x
+jsr EHexout
+lda slotllen,x
+jsr EHexout
+DB("^m^jFlist=")
+lda flist+1
+jsr EHexout
+lda flist
+jsr EHexout
+jsr ECrlfout
+#endif	
 	lda #0
 	sta p2
 	sta p2+1
@@ -499,6 +865,11 @@ l0	sta slotladr,y
 	lda flist+1
 	sta p+1
 l0
+#ifdef DEBUG
+DB("^m^jCheck@")
+lda p+1:jsr EHexout:lda p:jsr EHexout
+jsr ECrlfout
+#endif
 	ldy #2
 	lda (p),y
 	sec
@@ -506,10 +877,10 @@ l0
 	sta p3
 	iny
 	lda (p),y
-	sbc slotllen,x
+	sbc slothlen,x
 	sta p3+1
 	bcs found 
-next
+
 	lda p
 	sta p2
 	lda p+1
@@ -532,6 +903,17 @@ found
 	   previous one. p3 is the length of the free buffer minus the
 	   needed size. If the buffer is longer than needed, create a 
 	   new free buffer, then link new buffer to freelist */
+
+#ifdef DEBUG
+DB("^m^jFound Free buffer to alloc:")
+DB("^m^jbuffer=")
+lda p+1:jsr EHexout:lda p:jsr EHexout
+DB("^m^jprevious=")
+lda p2+1:jsr EHexout:lda p2:jsr EHexout
+DB("^m^jrest len=")
+lda p3+1:jsr EHexout:lda p3:jsr EHexout
+jsr ECrlfout
+#endif
 
 	lda p		/* save buffer address */
 	sta slotladr,x
@@ -558,9 +940,13 @@ found
 	sta (p4),y
 
 	iny		/* set new length */
+	lda slotllen,x
+	sta (p),y
 	lda p3
 	sta (p4),y
 	iny
+	lda slothlen,x
+	sta (p),y
 	lda p3+1
 	sta (p4),y
 
@@ -583,6 +969,10 @@ nocreate
 	clc
 	bcc geta
 freestart
+#ifdef DEBUG
+DB("^m^jFreestart")
+lda p+1:jsr EHexout:lda p:jsr EHexout:jsr ECrlfout
+#endif
 	lda p
 	sta flist
 	lda p+1
@@ -601,8 +991,17 @@ geta
 	lda slotladr,x
 	sta p3
 	ora p3+1
-	beq end
+	beq end2
 
+#ifdef DEBUG
+DB("^m^jFreeing Slot ")
+txa:jsr EHexout
+lda p3+1
+jsr EHexout
+lda p3
+jsr EHexout
+jsr ECrlfout
+#endif
 	ldy #2
 	lda slotllen,x
 	sta (p3),y
@@ -618,6 +1017,10 @@ geta
 	ora flist+1
 	bne ok		/* no free buffer so far? */
 
+#ifdef DEBUG
+DB("^m^jFreeing...")
+lda p3+1:jsr EHexout:lda p3:jsr EHexout:jsr ECrlfout
+#endif
 	lda p3
 	sta flist
 	lda p3+1
@@ -627,7 +1030,7 @@ geta
 	sta (p3),y
 	iny
 	sta (p3),y
-	clc
+end2	clc
 	rts
 ok	
 	lda #0
@@ -642,6 +1045,13 @@ ok
 	   ordered free list. Then we have to check if we can merge
 	   free buffers */
 loop
+#ifdef DEBUG
+DB("Check slot @ ")
+lda p+1: jsr EHexout
+lda p: jsr EHexout
+jsr ECrlfout
+#endif
+
 	lda p3+1
 	cmp p+1
 	bcc found
@@ -669,6 +1079,32 @@ end
 
 found	/* p2 is the buffer before the one to be freed, p the one behind.
 	   p3 is the buffer to be inserted */
+
+#ifdef DEBUG
+DB("Found buffer^m^j")
+DB("p3=")
+lda p3+1:jsr EHexout:lda p3:jsr EHexout:jsr ECrlfout
+DB("p2=")
+lda p2+1:jsr EHexout:lda p2:jsr EHexout:jsr ECrlfout
+#endif
+	lda p2
+	ora p2+1
+	bne fok
+			; insert before the first free buffer so far
+	ldy #0
+	lda flist
+	sta (p3),y
+	iny
+	lda flist+1
+	sta (p3),y
+	lda p3
+	sta flist
+	ldy p3+1
+	sty flist+1
+	jsr bmerge
+	clc
+	rts
+fok			; insert to list
 	ldy #1
 	lda (p2),y
 	sta (p3),y
@@ -694,8 +1130,13 @@ found	/* p2 is the buffer before the one to be freed, p the one behind.
 /* split buffer xr at size a/y for first part. return new buffer ID in x */
 &bsplit	.(
 	stx slot
+	clc
+	adc #MINBUF-1
+	and #MINMASK
 	sta p2
-	sty p2+1
+	bcc l0
+	iny
+l0 	sty p2+1
 	tya
 	cmp slothlen,x
 	bcc ok
@@ -736,6 +1177,8 @@ oknull	clc
 &btrunc	.(
 	jsr bsplit
 	bcs oops
+DB("^m^jBsplit OK!^m^j")
+
 	jmp bfree
 oops	rts
 	.)
@@ -818,6 +1261,50 @@ nomerge
 	clc
 	rts
 	.)
+
+#ifdef DEBUG
+&printmem .(
+DB("^m^jMemory Free List:^m^j")
+	lda flist
+	sta p
+	lda flist+1
+	sta p+1
+	ldx #STDERR
+loop
+	lda p+1
+	jsr EHexout
+	lda p
+	jsr EHexout
+	lda #"["
+	jsr Fputc
+	ldy #3
+	lda (p),y
+	jsr EHexout
+	dey
+	lda (p),y
+	jsr EHexout
+	DB("]->")
+	ldy #1
+	lda (p),y
+	jsr EHexout
+	dey
+	lda (p),y
+	jsr EHexout
+	jsr ECrlfout
+
+	ldy #1
+	lda (p),y
+	pha
+	dey
+	lda (p),y
+	sta p
+	pla
+	sta p+1
+	ora p
+	bne loop
+	rts
+	.)
+#endif
 
 	.)
 
