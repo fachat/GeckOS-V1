@@ -186,10 +186,25 @@ nomsl
 	jsr retransmit
 noretrans
 noti	
+
 	ldy #TCB_STATE
 	lda (tcbp),y
 	cmp #TCP_ESTAB
 	bne next
+
+	ldy #TCB_FLAG
+	and #1
+	beq noqueuedfin
+
+	jsr send_fin
+	bcs next
+
+	lda #TCP_FINW1
+	ldy #TCB_STATE
+	sta (tcbp),y
+	jmp next
+
+noqueuedfin	
 
 	ldy #TCB_SERVICE
 	lda (tcbp),y
@@ -588,7 +603,12 @@ ack1	lda tmp
 	bcc a0
 
 	/* TODO: ack ahead send_next -> send ack, return */
-	DB("Ack ahead send_next^m^j")
+DB("Ack ahead send_next^m^jpkt.ack=")
+ldy #TH_ACK:ldx #4:x0 lda (pd),y:jsr EHexout:iny:dex:bne x0
+DB(" seq.sndnxt=")
+ldy #TCB_SND_NXT: ldx #4:x1 lda (tcbp),y: jsr EHexout: iny: dex: bne x1
+jsr ECrlfout
+
 	jmp tdisc
 a0
 	jsr getuna
@@ -602,7 +622,7 @@ aignore
 	lda tmp
 	cmp #2		; exactly SND_NXT -> FIN ack'd
 	bne do6
-	ldy #TH_FLAG
+	ldy #TCB_STATE
 	lda #TCP_FINW2
 	sta (tcbp),y
 	sta state
@@ -1239,12 +1259,13 @@ nobuffer
 	lda (tcbp),y
 	clc
 	adc #1
-	cmp #6		; retransmit 6 times only ?
-	bcs ende
+	cmp #10		; retransmit 6 times only ?
+	bcs error
 	jsr iniretrans
 
 	jsr incownr
 	jmp queueslot
+error	jsr tclose
 ende	rts
 	.)
 
@@ -1283,9 +1304,10 @@ piok
 	beq ok
 
 move	DB("TCP offset wrong!^m^j")
-#if 0
-	lda qp+1: jsr EHexout: lda qp: jsr EHexout: lda #":": jsr ECout
-	ldy #0: xx lda (qp),y: jsr EHexout: iny: cpy #10: bcc xx
+#if 1
+	lda pslot:jsr EHexout:lda #"-":jsr ECout
+	lda pp+1: jsr EHexout: lda pp: jsr EHexout: lda #":": jsr ECout
+	ldy #0: xx lda (pp),y: jsr EHexout: iny: cpy #10: bcc xx
 	jsr ECrlfout
 #endif
 
@@ -1432,6 +1454,7 @@ l1	lda (tcbp),y
 &send_fin
 	lda #THF_FIN+THF_ACK
 	.(
+		/* TODO: set queued FIN until everything is really ok */
 	sta tmp
 	lda #<TH_OPTIONS+TCP_OFFSET
 	ldy #>TH_OPTIONS+TCP_OFFSET
@@ -1446,22 +1469,6 @@ ok	;stx qslot
 	DB("getpi error in send_*^m^j")
 	rts
 piok
-/*
-	sta qp
-	sty qp+1
-
-	clc
-	adc #TCP_OFFSET
-	sta qd
-	tya
-	adc #0
-	sta qd+1
-
-	lda #<TH_OPTIONS
-	sta ql
-	lda #>TH_OPTIONS
-	sta ql+1
-*/
 #if 0
 DB("send_* slot=")
 lda pslot:jsr EHexout:jsr ECrlfout
@@ -1473,6 +1480,13 @@ lda pslot:jsr EHexout:jsr ECrlfout
 	lda tmp
 	and #THF_FIN+THF_SYN
 	beq nofin
+
+DB("send FIN or SYN: tcbp=")
+lda tcbp+1:jsr EHexout:lda tcbp:jsr EHexout:DB(", sndnxt=")
+ldy #TCB_SND_NXT:ldx #4:x2 lda (tcbp),y:jsr EHexout:iny:dex:bne x2
+DB(" ret=")
+tsx:lda $102,x:jsr EHexout:lda $101,x:jsr EHexout
+jsr ECrlfout
 
 	lda #1
 	ldx #0
@@ -1559,6 +1573,14 @@ l1	ldy #TCB_NTXBUF
 	ldy #TCB_LSTATE
 	lda #TCP_CLOSED
 	sta (tcbp),y
+
+	; clear connection specific data 
+	lda #0
+	ldy #TCB_CONN
+l2	sta (tcbp),y
+	iny
+	cpy #TCB_LEN
+	bcc l2
 	clc
 	rts
 	.)
@@ -1568,6 +1590,9 @@ l1	ldy #TCB_NTXBUF
 #include "tcpsrv.a65"
 #ifndef NO_FSTCP
 #include "fstcp.a65"
+#endif
+#ifndef NO_WWW
+#include "wwwsrv.a65"
 #endif
 
 	.)

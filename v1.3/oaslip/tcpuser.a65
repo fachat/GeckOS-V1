@@ -55,6 +55,9 @@ chargen_srv
 #ifndef NO_FSTCP
 	jsr fstcp_init
 #endif
+#ifndef NO_WWW
+	jsr wwwsrv_init
+#endif
 	rts
 	.)
 
@@ -107,10 +110,9 @@ ok	clc
 	rts
 	.)
 
-+tcp_close .(
-	jsr settcb
-	bcs notcb
-&tcp_sig_close
+#if 0
+/* this seems to be ok! */
+tcp_sig_close .(
 	ldy #TCB_STATE
 	lda (tcbp),y
 	cmp #TCP_LISTEN
@@ -119,8 +121,10 @@ ok	clc
 	beq del
 
 	cmp #TCP_SYNRXD
+beq c1b
+cmp #TCP_ESTAB
 	bne c1
-	
+c1b	
 	ldy #TCB_NTXBUF
 	lda (tcbp),y
 	beq c1a
@@ -137,6 +141,73 @@ c1a	jsr send_fin
 	ldy #TCB_STATE
 	lda #TCP_FINW1
 	sta (tcbp),y
+	clc
+	rts
+
+c2	cmp #TCP_CLOSEW
+	bne closing
+	jsr send_fin
+	ldy #TCB_STATE
+	lda #TCP_CLOSING
+	sta (tcbp),y
+	clc
+	rts
+del
+	;lda #TCP_CLOSED
+	;sta (tcbp),y
+	jsr tclose
+	clc
+	rts
+notcb	lda #TE_NOCONN
+	.byt $2c
+closing	lda #TE_CLOSING
+	sec
+	rts
+	.)
+#endif
+
+/* ??? */
++tcp_close .(
+	jsr settcb
+	bcc tcp_sig_close
+	jmp notcb
+&tcp_sig_close
+
+DB("tcp_sig_close, tcbp=")
+lda tcbp+1:jsr EHexout:lda tcbp:jsr EHexout:jsr ECrlfout
+
+	ldy #TCB_STATE
+	lda (tcbp),y
+	cmp #TCP_LISTEN
+	beq del
+	cmp #TCP_SYNTXD
+	beq del
+
+	cmp #TCP_SYNRXD
+	beq c1b
+	cmp #TCP_ESTAB
+	bne c2
+c1b	
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	beq c1a
+	ldy #TCB_FLAG
+	lda (tcbp),y	; queued fin !
+	ora #1
+	sta (tcbp),y
+	clc
+	rts
+
+c1a	jsr send_fin
+	bcs c1b
+	ldy #TCB_STATE
+	lda #TCP_FINW1
+	sta (tcbp),y
+
+DB("close: tcbp[25]=")
+ldy #25:lda (tcbp),y:jsr EHexout
+jsr ECrlfout
+
 	clc
 	rts
 

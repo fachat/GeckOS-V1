@@ -41,6 +41,8 @@
 
 /* These are changeable ****************************************************/
 
+#undef	OLDHACK			/* only I should need this - you #undef */
+
 #define	ROMSTART	$8000	/* where the ROM starts */
 
 #define	UARTBASE	$d600	/* if you have a 16550A UART with FIFO */

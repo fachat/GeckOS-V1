@@ -1,0 +1,11 @@
+<HTML>
+<HEAD>
+<TITLE>Error</TITLE>
+</HEAD>
+<BODY>
+<H1>Error 400</H1>
+
+<A HREF="http://www.tu-chemnitz.de/~fachat/csa">OS/A65</A>TCP simple WWW server error: illformed request
+</BODY>
+</HTML>
+

@@ -59,7 +59,7 @@
 #define	TIME_MSL	100	/* 10 seconds ? */
 #define	TIME_RETRANS	30	/* 3 seconds ? */
 
-#define	MAXCONN		8
+#define	MAXCONN		12
 
 /* TCP connection states */
 #define	TCP_CLOSED	0
@@ -122,9 +122,12 @@
 #define	TCB_TRIES	39	/* number of sends so far */
 #define	TCB_NTXBUF	40	/* number of buffers in retranmission buffer */
 #define	TCB_TXBUF	41	/* retransmission buffer */
+				/* connection specific stuff starts here */
+#define	TCB_CONN	(TCB_TXBUF+TCP_MAXTXB)
 
-#define	TCB_LEN		64	/* actually: (41+TCP_MAXTXB) but address 
-				   computation is simpler this way (settcb) */
+#define	TCB_LEN		64	/* actually: (41+TCP_MAXTXB+conn_stuff) but 
+				   address computation is simpler this way 
+				   (settcb) */
 
 #define	TCPWIN		512	/* we have a receive window of this size */
 #define	TCPSEG		256	/* we send maximal TCPSEG sized segments */

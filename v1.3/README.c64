@@ -126,12 +126,12 @@ Memory Map.
 -----------
 
 The area below $80 is used by the ROM. The same holds true between
-$300 and $1000. The exact values can be seen in the assembler screen
+$300 and $1c00. The exact values can be seen in the assembler screen
 output (sys* are the 'allocation counters' for different memory types;
 they are printed at the beginning of each source file and afterwards to
 compare).
 
-$1000-$8000 free memory 
+$1c00-$8000 free memory 
 $8000-$d000 ROM (well, the RAM contains what should be in the ROM of 
 	a CS/A computer...)
 $d000-$e000 I/O area and the RAM under it contains the charrom

@@ -15,18 +15,29 @@
    to the Internet! 
    It has no other security protection than checking the IP address of
    an incoming connection request!
+   
+   Never, never ever run the WWW server on the OS/A computer (C64), if 
+   it is connected to more than your home PC. It reads all files from 
+   the specified drive!
 
 2) Now that you're warned: What's it for?
 
    The TCP/SLIP implementation will someday be used for telneting to and
    from an OS/A65 computer. Now it's used to transfer files between an 
-   OS/A65 computer and a (Unix) computer. 
+   OS/A65 computer and a (Unix) computer. It can also be used as a simple
+   WWW server now.
+
+   I use it on a C64, to transfer files between a PC and a VC1541 disk.
    
    The lowest level you can see is the icmp (internet control message
    protocol) level. If you ping the OS/A65 computer, it replies.
 
    Then there are the simple test TCP ports "echo" (7), "discard" (9) and
    "chargen" (19). You can telnet to these ports on the OS/A65 computer.
+
+   Another special port is the http port (80). This port is used to 
+   transfer html pages for the World Wide Web (WWW). A special server
+   is listening on this port and serves requests from a given directory.
 
    The next level is a client-server-application. The server "fstcp"
    runs on a connected (unix) system. The client "slip.obj" runs on the
@@ -144,6 +155,12 @@
    first lines of "main.a65" the OS/A65 IP address (MY_IP) is defined.
    (note the comma instead of the dots!)  Also the fstcp server TCP
    address (IP and port) are defined there.
+   The WWW server defines its drive and directory it will read the files
+   from. Do _never_ specify a drive on the fstcp filesystem. The slip prg
+   will hang on the first access!
+   
+   Watch out: Both WWW server, and FSTCP filesystem must never be used
+   at the same time! This hangs the machine.
 
    To assemble the files, you have to have my 6502 crossassembler "xa" 
    in you path, with version above 2.1.0.
@@ -192,6 +209,11 @@
     - You should now be able to ping the C64, and do telnets to the 
       echo, discard and chargen ports.
 
+    - when telneting to the http port (80) (when the FSTCP is disabled
+      and the WWW server is enabled in oaslip/main.a65), you can issue the 
+      "GET" command, followed by an URL on the OS/A65 computer.
+      You then get the specified file.
+
     - It should now also be possible to show the directory of drive g:,
       and to read files from drive g:
       This drive will be the contents of the directory given to the fstcp
@@ -199,8 +221,20 @@
 
 7) (Known) Bugs
 
+   - The WWW server _and_ the FSTCP filesystem doesn't work! They both
+     use the somehow too simple SEND/RECEIVE interface. This will only
+     change with kernel 2.*
+
    - floating invalid TCP packets can irritate the tcp client when looking
-     for a server. Then restart the client.
+     for a server. Restart the client then.
+
+   - The WWW server only understands "GET filename" requests. No "http://"
+     or host prefixes are allowed. At least with Netscape it seems to work.
+
+   - The WWW server doesn't cope with multiple requests at the same time 
+     (like images in a page itself...) This is a real bug.
+
+   - The implementation is bloated, and horribly slow.
 
    - Tons of others, I'm sure
 

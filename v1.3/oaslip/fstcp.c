@@ -190,6 +190,13 @@ printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 		  }
 		}
 		break;
+	case FS_CLOSE:
+		if(fp) fclose(fp);
+		if(dp) closedir(dp);
+		files[tfd].fp = NULL;
+		files[tfd].dp = NULL;
+		retbuf[FSP_DATA] = 0;
+		break;
 	}
 
 
