@@ -29,6 +29,14 @@
 /* 	balloc, bfree, btrunc, bsplit, brealloc			      */
 /*	getbadr, getblen					      */
 
+#ifndef MAXSLOT
+#define	MAXSLOT		16
+#define	IPBUFFER	256
+sysmem	=$0400
+sysblk	=$4000
+syszp	=$80
+#endif
+
 #define	MINBUF	8
 #define	MINMASK	%11111000
 

@@ -864,6 +864,14 @@ lend
 XR	=sysmem
 -sysmem	+=1
 
+&ECout	.(
+	stx XR
+	ldx #STDERR
+	jsr Fputc
+	ldx XR
+	rts
+	.)
+
 &ECrlfout .(
 	stx XR
 	ldx #STDERR
@@ -919,6 +927,7 @@ tole
           rts
           .)
 
+	.)
 	.)
 
 

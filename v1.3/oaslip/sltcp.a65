@@ -36,6 +36,12 @@
  *	
  */
 
+#ifndef DB
+#define DB(a)
+sysmem	=$400
+syszp	=$80
+#endif
+
 #define	DEBUGTCP
 
 #include "tcp.def"
@@ -46,7 +52,11 @@ tcbp	=syszp
 -syszp	+=2
 
 dlen	=sysmem
--sysmem	+=2
+doffset	=sysmem+2	; data offset from ip!
+toffset	=sysmem+3	; tcp header offset from ip!
+seg_flag=sysmem+4	; incoming segment flag byte
+tslot	=sysmem+5	; incoming segment memory slot
+-sysmem	+=6
 tcb	=sysmem
 -sysmem	+=MAXCONN*TCB_LEN
 phdr	=sysmem
@@ -148,6 +158,10 @@ plp
 
 tcpok	/* here we have a valid TCP packet in (id),0-idlen. */
 
+	ldy #TH_FLAG
+	lda (id),y
+	sta seg_flag
+
 	ldy #TH_DOFFSET
 	lda (id),y
 	and #$f0
@@ -155,15 +169,35 @@ tcpok	/* here we have a valid TCP packet in (id),0-idlen. */
 	lsr
 	clc
 	adc #TPH_LEN
-	sta dlen
+	sta doffset
 	lda idlen
 	sec
-	sbc dlen
+	sbc doffset
 	sta dlen
 	lda idlen+1
 	sbc #0
 	sta dlen+1
-		
+
+	lda ipl+1
+	bne datl
+	lda ipl
+	sec
+	sbc #TPH_LEN
+	sta toffset
+	clc
+	adc doffset
+	sta doffset
+
+	bcc looktcb
+datl
+	DB("Data offset too large^m^j")
+	jmp discard
+looktcb
+	lda islot
+	sta tslot
+	lda #<-1
+	sta islot	; disable re-use of incoming packet
+
 	/* find TCB for this packet */
 	.(
 lastfre	=sysmem
@@ -230,9 +264,37 @@ ret
 	lda (tcbp),y
 	sta state
 
+#ifdef DEBUGTCP
+	lda state
+	asl
+	tax
+	lda ttab+1,x
+	tay
+	lda ttab,x
+	jsr ETxtout
+	jmp noout
+
+ttab	.word tclosed, tlisten, tsynrxd, tsyntxd, testab, tfinw1, tfinw2
+	.word tclosew, tlastack, tclosing, ttimew
+
+tclosed	.asc "Closed:^m^j",0
+tlisten	.asc "Listen:^m^j",0
+tsynrxd .asc "SynRXd:^m^j",0
+tsyntxd .asc "SynTXd:^m^j",0
+testab 	.asc "Established:^m^j",0
+tfinw1	.asc "FinW1:^m^j",0
+tfinw2	.asc "FinW2:^m^j",0
+tclosew	.asc "CloseWait:^m^j",0
+tlastack .asc "LastAck:^m^j",0
+tclosing .asc "Closing:^m^j",0
+ttimew	.asc "TimeWait^m^j",0
+
+noout
+#endif
 	lda state
 	asl
 	tay
+	
 	lda stab+1,y
 	pha
 	lda stab,y
@@ -248,12 +310,10 @@ tmp2	=sysmem+1
 -sysmem	+=2
 
 tcp_closed .(
-	DB("TCP Closed^m^j")
-	ldy #TH_FLAG
-	lda (id),y
+	lda seg_flag
 	and #THF_RST
 	bne end
-	lda (id),y
+	lda seg_flag
 	and #THF_ACK
 	bne ackset
 
@@ -315,21 +375,19 @@ noack
 
 	jmp bangbuf
 	
-end	jmp discard
+end	jmp tdiscard
 	.)
 
 tcp_listen .(
-	DB("Listen^m^j")
-	ldy #TH_FLAG
-	lda (id),y
+	lda seg_flag
 	and #THF_RST
 	bne listen_rst
 
-	lda (id),y
+	lda seg_flag
 	and #THF_ACK
 	bne listen_ack
 
-	lda (id),y
+	lda seg_flag
 	and #THF_SYN
 	bne listen_syn
 	jmp nosyn
@@ -340,7 +398,9 @@ tcp_listen .(
 	jmp disc
 okhdr
 	jsr hasdata
-	bcc dat
+	beq nodat
+	jsr copy_n_queue
+nodat
 	lda #0
 	tay
 	jsr chkbuf
@@ -349,7 +409,7 @@ okhdr
 	ldy #TH_FLAG
 	lda #THF_SYN + THF_ACK
 	sta (id),y
-	
+
 	jsr iniseq
 
 	ldy #TCB_STATE
@@ -357,6 +417,8 @@ okhdr
 	sta (tcbp),y
 
 	jsr setack
+	jsr incuna
+
 	jmp bangbuf
 
 &reset
@@ -364,68 +426,218 @@ okhdr
 	ldy #TCB_STATE
 	lda #TCP_SYNRXD
 	sta (tcbp),y
-	jmp discard
+	jmp tdiscard
 
 listen_rst
 	DB("Reset while listening^m^j")
-	jmp disc
-dat	DB("Syn packet has data^m^j")
-	jmp disc
+	jmp tdiscard
 short	DB("Syn packet short^m^j")
-	jmp disc
+	jmp tdiscard
 nosyn	DB("Listen but no Syn!^m^j")
-disc	jmp discard
+disc	jmp tdiscard
 	.)
 
+tcp_estab
+tcp_finw1  tcp_finw2  tcp_closew tcp_lastack tcp_closing
+tcp_timew
 tcp_synrxd .(
-	DB("SynRxd^m^j")
 
-	jsr rxhdr
-	bcs disc
+	/* first, check sequence number */
+	jsr checkseq
+	bcc seqok
 
+	lda seg_flag
+	and #THF_RST
+	bne disca	/* discard packet */
+
+	jsr setseq
+	jsr setack
 	ldy #TH_FLAG
-	lda (id),y
+	lda #THF_ACK
+	sta (id),y
+	jmp bangbuf
+
+disca	jmp tdiscard
+
+seqok	/* second, check the RST bit */
+	lda seg_flag
 	and #THF_RST
 	beq noreset	
-	jmp reset	/* TODO: if from active open, then close! */
 
-noreset
-	lda (id),y
+	lda state
+	cmp #TCP_SYNRXD
+	bne seq1
+
+	/* TODO: if from active open, then close! */
+	jmp reset	
+
+seq1	cmp #TCP_LASTACK
+	bcs seq2
+
+	/* TODO: flush and close everything */
+	jmp tdiscard
+
+seq2	/* TODO: close */
+	jmp tdiscard
+
+noreset	/* third, check security and precedence... */
+
+	/* fourth, check SYN bit */
+
+	lda seg_flag
 	and #THF_SYN
 	beq nosyn
 	; this is an error - abort anything
+
+	/* TODO: flush everything, close */
 	ldy #TCB_STATE
 	lda #TCP_CLOSED
 	sta (tcbp),y
 	jmp send_rst
 
-nosyn
-	lda (id),y
+nosyn	/* fifth, check the ack bit */
+	lda seg_flag
 	and #THF_ACK
-	beq noack
+	bne ackok
+
+	DB("No Ack^m^j")
+	jmp tdiscard
+ackok
+	lda state
+	cmp #TCP_SYNRXD
+	bne ack1
 
 	jsr checkack
-	bcs badack
+	bcc ackok2
 
-	jsr rxhdr
-	bcs disc
-	
-	ldy #TCB_STATE
+badack	DB("Bad Ack in packet^m^j")
+	jmp send_rst
+ackok2
+	ldy #TCB_STATE	/* everything ok -> enter estab and continue... */
 	lda #TCP_ESTAB
 	sta (tcbp),y
+	sta state
 
-disc	jmp discard
+ack1	jsr checkack
+	bcc a0
+	tay
+	beq aignore	/* old ack, ignore */
 
-noack	DB("No Ack^m^j")
-	jmp discard
-badack	DB("Bad Ack in packet^m^j")
-	jmp discard
+	/* TODO: ack ahead send_next -> send ack, return */
+	DB("Ack ahead send_next^m^j")
+	jmp tdiscard
+a0
+	ldy #TH_ACK
+a1	lda (id),y
+	sta (tcbp),y
+	iny
+	cpy #TH_ACK+4
+	bcc a1
+	/* TODO: flush ack'd packets on retransmission queue */
+aignore
+
+	/* TODO: check other states here -> state changes */
+
+	/* sixth, check the URG bit */
+
+	/* seventh, process segment text */ 
+	
+	lda state
+	cmp #TCP_ESTAB
+	bcc idat
+	cmp #TCP_FINW2+1
+	bcs idat
+
+	ldy #0
+	lda doffset
+	sta (ip),y
+	tya
+	iny
+	sta (ip),y
+	iny
+	lda dlen
+	sta (ip),y
+	iny
+	lda dlen+1
+	sta (ip),y
+
+	jsr hasdata
+	beq idat
+	jsr copy_n_queue	; ok, we need not copy without FIN...
+idat	
+
+	/* eighth, check the FIN bit */
+	
+	lda state
+	cmp #TCP_CLOSED
+	beq nofin
+	cmp #TCP_LISTEN
+	beq nofin
+	cmp #TCP_SYNTXD
+	beq nofin
+
+	lda seg_flag
+	and #THF_FIN
+	beq nofin
+
+	lda #1
+	ldx #0
+	jsr addrxnxt
+#if 0
+	ldy #TCB_RCV_NXT+3
+	lda (tcbp),y
+	clc
+	adc #1
+	sta (tcbp),y
+	dey
+	bcc noinc
+	lda (tcbp),y
+	adc #0
+	sta (tcbp),y
+	dey
+	bcc noinc
+	lda (tcbp),y
+	adc #0
+	sta (tcbp),y
+	dey
+	bcc noinc
+	lda (tcbp),y
+	adc #0
+	sta (tcbp),y
+noinc
+#endif
+	jsr setack
+	jsr setseq
+	ldy #TH_FLAG
+	lda #THF_ACK
+	sta (id),y
+	jsr bangbuf
+
+	lda state
+	cmp #TCP_ESTAB+1
+	bcs f1
+	lda #TCP_CLOSEW
+	bne fe
+
+fe	ldy #TCB_STATE
+	sta (tcbp),y
+
+f1	
+	/* TODO: check other states */
+
+nofin	
+tdisc	ldx tslot
+	bmi noslot
+	jsr bfree
+noslot	clc
+	rts
 	.)
 
 tcp_syntxd .(
 	DB("SynTxd^m^j")
-	ldy #TH_FLAG
-	lda (id),y
+jmp tdiscard
+#if 0
+	lda seg_flag
 	pha
 
 	jsr rxhdr
@@ -452,18 +664,18 @@ noack	lda #TCP_SYNRXD
 
 discp	pla
 disc	jmp discard
+#endif
 	.)
 
-tcp_estab
-tcp_finw1  tcp_finw2  tcp_closew tcp_lastack tcp_closing
-tcp_timew
-	DB("State not implemented^m^j")
-	jmp discard
-
+tdiscard .(
+	ldx tslot
+	jsr bfree
+	clc
+	rts
+	.)
 
 rxhdr	.(
-	ldy #TH_FLAG
-	lda (id),y
+	lda seg_flag
 	and #THF_SYN
 	beq nosyn
 
@@ -497,8 +709,7 @@ seql	lda (id),y
 	cpy #TH_SEQ+4
 	bcc seql
 
-	ldy #TH_FLAG
-	lda (id),y
+	lda seg_flag
 	and #THF_ACK
 	beq noack
 	ldy #TH_ACK	/* TODO: ack larger than send next ? -> send reset */
@@ -510,9 +721,21 @@ ackl 	lda (id),y
 noack
 	jmp doopts
 
-seqmismatch
+&seqmismatch
 	DB("Sequence number mismatch^m^j")
 	sec
+	rts
+	.)
+
+checkseq .(
+	ldy #TH_SEQ	/* we don't handle disordered packets - ignore them */
+seql	lda (id),y
+	cmp (tcbp),y
+	bne seqmismatch
+	iny
+	cpy #TH_SEQ+4
+	bcc seql
+	clc
 	rts
 	.)
 
@@ -578,19 +801,9 @@ d2len	=sysmem
 -sysmem	+=2
 
 hasdata	.(
-	ldy #TH_DOFFSET
-	lda (id),y
-	and #$f0
-	lsr
-	lsr
-	clc
-	adc #TPH_LEN
-	sec
-	sbc idlen
-	tax
-	lda #0
-	sbc idlen+1
-	;bcc yes
+	lda dlen
+	ora dlen+1
+	; bne yes
 	rts
 	.)
 
@@ -613,7 +826,7 @@ checkack .(
 	ldy #TH_ACK
 l1	lda (id),y
 	cmp (tcbp),y
-	bcc badack
+	bcc badack0
 	iny
 	cpy #TH_ACK+4
 	bcc l1
@@ -629,13 +842,16 @@ l1	lda (id),y
 	ldy #TH_ACK
 l2	lda (tcbp),y
 	cmp (id),y
-	bcc badack
+	bcc badack1
 	iny
 	cpy #TH_ACK+4
 	bcc l2
 	clc
 	rts
-badack	sec
+badack0	lda #0
+	.byt $2c
+badack1	lda #1
+	sec
 	rts
 	.)
 
@@ -728,8 +944,7 @@ l2	lda (id),y
 	bcc l2
 
 	; now check syn and add max seg size option if it's syn
-	ldy #TH_FLAG
-	lda (id),y
+	lda seg_flag
 	and #THF_SYN
 	beq nosyn
 	ldy #TH_OPTIONS
@@ -802,7 +1017,7 @@ nosyn	lda #$50
 	cpx id
 	beq nomove
 move	DB("packet start mismatch!^m^j")
-	jmp discard
+	jmp tdiscard
 nomove
 
 	lda idlen
@@ -836,7 +1051,90 @@ l3	lda (id),y
 	lda #6
 	sta (ip),y
 
+	lda tslot
+	sta islot
+
+#ifdef DEBUGTCP
+	DB("Send Seq: ")
+	ldy #TH_SEQ
+x1	lda (id),y
+	jsr EHexout
+	iny
+	cpy #TH_SEQ+4
+	bcc x1
+	DB("^m^jSend Ack: ")
+	ldy #TH_ACK
+x2	lda (id),y
+	jsr EHexout
+	iny
+	cpy #TH_ACK+4
+	bcc x2
+	DB("^m^jFlag= ")
+	ldy #TH_FLAG
+	lda (id),y
+	jsr EHexout
+	jsr ECrlfout
+#endif
+	lda #<-1
+	sta tslot
+
 	jmp sendip
+	.)
+
+	/* add a/x to rx_nxt */
+addrxnxt .(
+	ldy #TCB_RCV_NXT+3
+	clc
+	adc (tcbp),y
+	sta (tcbp),y
+	dey
+	txa
+	adc (tcbp),y
+	sta (tcbp),y
+	dey
+	ldx #2
+l5	lda (tcbp),y
+	adc #0
+	sta (tcbp),y
+	dey
+	dex
+	bne l5
+	rts
+	.)
+
+incuna	.(
+	ldy #TCB_SND_UNA+3
+	ldx #3
+	lda (tcbp),y
+	clc
+	adc #1
+	sta (tcbp),y
+	dey
+l5	lda (tcbp),y
+	adc #0
+	sta (tcbp),y
+	dey
+	dex
+	bne l5
+	rts
+	.)
+
+setseq	.(
+	lda tcbp
+	clc
+	adc #8
+	sta p2
+	lda tcbp+1
+	adc #0
+	sta p2+1
+
+	ldy #TH_SEQ
+l5	lda (p2),y
+	sta (id),y
+	iny
+	cpy #TH_SEQ+4
+	bcc l5
+	rts
 	.)
 
 setack	.(
@@ -857,8 +1155,85 @@ l5	lda (tcbp),y
 	rts
 	.)
 
+/* The following routine takes the packet from 
+ * islot/ip/id/ipl/idlen/dlen/doffset/toffset
+ * and queues it to the user data rx queue.
+ * It sets ack appropriately. 
+ * It copies the TCP header into a new packet and sets
+ * islot/ip/..., but dlen is zero.
+ */
+copy_n_queue .(
+myslot	=sysmem
+-sysmem	+=1
+myp	=syszp
+-syszp	+=2
+
+	lda doffset
+	ldy #0
+	jsr balloc
+	bcs nobuffer
+	stx myslot
+	jsr getbadr
+	sta myp
+	sty myp+1
+
+	ldy #0
+l0	lda (ip),y
+	sta (myp),y
+	iny
+	cpy doffset
+	bne l0
+
+	ldy #0
+	lda doffset
+	sta (ip),y		/* save for queue routines */
+	tya
+	iny
+	sta (ip),y
+	iny
+	lda dlen
+	sta (ip),y
+	iny
+	lda dlen+1
+	sta (ip),y
+
+	lda myp
+	sta ip
+	clc
+	adc toffset
+	sta id
+	lda myp+1
+	sta ip+1
+	adc #0
+	sta id+1
+
+	lda doffset
+	sec
+	sbc toffset
+	sta idlen
+	lda #0
+	sta idlen+1
+
+	lda tslot
+	jsr queue_packet	
+	bcs boom
+
+	lda dlen
+	ldx dlen+1
+	jsr addrxnxt
+boom
+	lda #0
+	sta dlen
+	sta dlen+1
+
+	lda myslot
+	sta tslot
+	clc
+nobuffer
+	rts
 	.)
 
+	.)
 
 settcb	.(
 #if (TCB_LEN - 64)
@@ -905,6 +1280,7 @@ l1	clc
 	rts
 	.)
 
+
 /***************************************************************************
  * Here follow the user routines (open, close etc)
  */
@@ -920,6 +1296,68 @@ telnet_srv .byte 0,0,0,0, 0,0, 23,0
 	lda #<telnet_srv
 	ldy #>telnet_srv
 	jsr tcp_listen
+	rts
+	.)
+
++queue_packet .(
+zp	=syszp
+z2	=syszp+2
+-syszp	+=4
+slot	=sysmem
+-sysmem	+=1
+
+	sta slot
+	tax
+	jsr getbadr
+	sta zp
+	sty zp+1
+
+	ldy #0
+	lda (zp),y
+	clc
+	adc zp
+	sta z2
+	iny
+	lda (zp),y
+	adc zp+1
+	sta z2+1
+	iny
+	lda (zp),y
+	tax
+	iny
+	lda (zp),y
+	sta zp+1
+	stx zp
+
+#ifdef DEBUGTCP
+DB("Data: pos=")
+lda z2+1: jsr EHexout: lda z2: jsr EHexout
+DB(" len= ")
+lda zp+1: jsr EHexout: lda zp: jsr EHexout
+jsr ECrlfout
+#endif
+
+dloop	ldy #0
+	lda (z2),y
+	jsr EHexout
+	lda #" "
+	jsr ECout
+
+	inc z2
+	bne l0
+	inc z2+1
+l0	lda zp
+	bne l1
+	dec zp+1
+l1	dec zp
+	lda zp
+	ora zp+1
+	bne dloop
+
+	jsr ECrlfout
+
+	ldx slot
+	jsr bfree
 	rts
 	.)
 
@@ -949,3 +1387,4 @@ notcb	rts
 	.)
 
 	.)
+
