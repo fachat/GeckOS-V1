@@ -280,8 +280,6 @@ pla:tax:plp
 	sec
 	rts
 okfree	lda slotownr,x
-;	lda slothadr,x
-;	ora slotladr,x
 	bne okf1
 	DB("bfree: slot not in use^m^j")
 	sec
@@ -289,11 +287,11 @@ okfree	lda slotownr,x
 okf1
 /*	DB("bfree(")*/
 
-#if 0 /*def DEBUGMEM*/
+#if 1 /*def DEBUGMEM*/
 DB("Freeing Slot ")
-txa:jsr EHexout
-lda #" ":jsr ECout
-jsr printlist
+txa:jsr EHexout:DB(", #ownr="):lda slotownr,x:jsr EHexout:
+DB(", retadr="):txa:pha:tsx:lda $103,x:jsr EHexout:lda $102,x:jsr EHexout
+pla:tax:jsr ECrlfout
 #endif
 
 	dec slotownr,x

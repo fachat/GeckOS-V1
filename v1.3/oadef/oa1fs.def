@@ -45,7 +45,7 @@
 #define	  FS_READ	 16	   /* pull data (FSTCP internal)	*/
 #define	  FS_WRITE	 17	   /* push data (FSTCP internal)	*/
 #define	  FS_REPLY	 18	   /* return value (FSTCP internal)	*/
-#define	  FS_EOF	 18	   /* as FS_WRITE, but signal EOF	*/
+#define	  FS_EOF	 19	   /* as FS_WRITE, but signal EOF	*/
 
 /* struct to be sent with FS_OPEN_*					*/
 

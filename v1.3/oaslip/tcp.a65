@@ -268,6 +268,8 @@ tdisc_check
 &tdisc	ldx pslot
 	bmi illtd
 	jsr bfree
+	lda #<-1
+	sta pslot
 	clc
 	rts
 illtd	DB("tdisc with illegal slot!^m^j")
@@ -516,7 +518,7 @@ seqok	/* second, check the RST bit */
 	jsr tdisc
 	
 	/* signal_user may use q* variables! */
-	lda #TE_RESET
+	lda #TE_RESET0
 	jmp signal_user
 
 seq1	cmp #TCP_LASTACK
@@ -526,7 +528,7 @@ seq1	cmp #TCP_LASTACK
 	jsr tdisc
 
 	/* signal_user may use q* variables! */
-	lda #TE_RESET
+	lda #TE_RESET1
 	jmp signal_user
 
 seq2 	jsr tdisc
@@ -546,7 +548,7 @@ noreset	/* third, check security and precedence... */
 	/* flush everything, close */
 	jsr send_rst
 
-	lda #TE_RESET
+	lda #TE_RESET2
 	jmp signal_user
 
 nosyn	/* fifth, check the ack bit */
@@ -699,7 +701,7 @@ idat
 	lda seg_flag
 	and #THF_FIN
 	beq nofin
-
+#if 0			/* when changing to CLOSEW, user is signaled in loop */
 	lda phl
 	pha
 	lda pslot
@@ -716,6 +718,7 @@ idat
 	DB("getpi error in tcp_else^m^j")
 	rts
 piok
+#endif
 	lda #1
 	ldx #0
 	jsr addrxnxt
@@ -784,7 +787,7 @@ noack
 	beq rstack
 
 	jsr tdisc
-	lda #TE_RESET
+	lda #TE_RESET3
 	jmp signal_user
 
 	/* TODO: close? or define that user signal routine should do that... */
@@ -1022,6 +1025,8 @@ x2	lda (pd),y
 	jsr ECrlfout
 #endif
 	ldx pslot
+lda #<-1
+sta pslot
 	jmp queueslot
 needmove
 	jmp tdisc
@@ -1431,6 +1436,7 @@ l1	lda (tcbp),y
 	ldy #>TH_OPTIONS+TCP_OFFSET
 	jsr balloc
 	bcc ok
+	DB("Couldn't alloc send_* buffer!^m^j")
 	rts
 ok	;stx qslot
 	lda #TCP_OFFSET
@@ -1455,6 +1461,9 @@ piok
 	lda #>TH_OPTIONS
 	sta ql+1
 */
+DB("send_* slot=")
+lda pslot:jsr EHexout:jsr ECrlfout
+
 	jsr setout
 	jsr setseq
 	jsr setack
