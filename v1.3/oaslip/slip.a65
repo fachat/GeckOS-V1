@@ -37,9 +37,12 @@
 
 #ifndef ROM
 
-/*#define	DEBUG*/
+#define	DEBUG
 /*#define	DEBUGMEM*/
-#if 0
+/*#define	DEBUGPKT*/
+#define	CHARIN
+
+#if 1
 #define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr ETxtout:.):
 #else
 #define	DB(a)
@@ -163,16 +166,15 @@ PRG	.(
 	jsr binit
 	bcs exit
 DB("^m^jbinit ok^m^j")
+#ifndef CHARIN
 	jsr ibufinit
+#endif
 
 	jsr oinit
 	bcs exit
 DB("^m^joinit ok^m^j")
 	jsr iinit
 DB("iinit ok^m^j")
-#ifdef DEBUG
-jsr printmem
-#endif
 	bcc doloop
 exit	rts
 
@@ -376,6 +378,7 @@ jsr printmem
 oops	rts
 #endif	
 
+#ifndef CHARIN
 inbuf	.(
 
 ibuf 	=sysmem
@@ -386,7 +389,6 @@ rp	=sysmem+1
 p	=syszp
 -syszp	+=2
 
-#if 0
 	lda len
 	bne buffd
 
@@ -408,14 +410,13 @@ buffd
 	inx
 	stx rp
 	cpx len
-	bne ok
+	bcc ok
 	ldx #0
 	stx len
 ok	
 	clc
 err	rts
 
-#endif
 
 &&ibufinit
 	lda #0
@@ -423,6 +424,7 @@ err	rts
 	clc
 	rts
 	.)
+#endif
 
 &loopin	.(
 	bit islot
@@ -430,9 +432,12 @@ err	rts
 	jsr startin
 	bcs ende
 running
+#ifdef CHARIN
 	ldx #STDIN
 	jsr GETC
-	;jsr inbuf
+#else
+	jsr inbuf
+#endif
 	bcc gotbyt
 ende 	rts
 gotbyt
@@ -467,6 +472,7 @@ l1
 	lda ip
 	cmp iend
 	bcc loopin
+DB("input buffer overflow!^m^j")
 discard
 	ldx islot
 	jsr getbadr
@@ -494,10 +500,10 @@ even
 	beq discard	; zero length packet received
 ok
 
-#ifdef DEBUG
+#ifdef DEBUGPKT
 	/* so what now? */
-/*DB("^m^jReceived Packet:^m^j")*/
-	;jsr printpacket
+DB("^m^jReceived Packet:^m^j")
+	jsr printpacket
 
 DB("^m^jip=")
 lda ip+1:jsr EHexout:lda ip:jsr EHexout
@@ -514,7 +520,7 @@ lda iend+1:jsr EHexout:lda iend:jsr EHexout
 	lda (ip),y
 	sta ilen
 
-#ifdef DEBUG
+#ifdef DEBUGPKT
 DB("^m^jiph->len=")
 lda ilen+1
 jsr EHexout
@@ -567,7 +573,7 @@ lenok
 	ldy ip+1
 	jsr checksum
 
-#ifdef DEBUG
+#ifdef DEBUGPKT
 php
 pha
 txa
@@ -606,55 +612,38 @@ l2 	lda MyIP-IPH_TRG,y
 	bne no
 	jmp icmp
 no
+	DB("Packet discarded: unknown protocol^m^j")
+	jmp discard
+
+discardcs
+	DB("Packet discarded: IP Header checksum^m^j")
+disc	jmp discard
+
+discardip
+	DB("Packet discarded: wrong IP^m^j")
 	jmp discard
 
 discardlen
-	DB("^m^jPacket discarded due to length mismatch^m^j")
+	DB("Packet discarded: length mismatch^m^j")
 	jmp discard
-discardcs
-	DB("^m^jPacket discarded due to checksum^m^j")
-disc	jmp discard
-discardip
-	DB("^m^jPacket discarded due to wrong IP^m^j")
+
+discardics
+	DB("Packet discarded: ICMP checksum^m^j")
 	jmp discard
 
 icmp	.(
-	lda ihl
-#ifdef DEBUG
-pha
-jsr EHexout
-pla
-#endif
-	clc 
-	adc ip
-	pha
-#ifdef DEBUG
-jsr EHexout
-#endif
-	lda ip+1
-	adc #0
-#ifdef DEBUG
-pha
-jsr EHexout
-pla
-#endif
-	tay
 	lda ilen		; well, just take the low byte (TODO)
-	clc
-	adc ihl
+	sec
+	sbc ihl
 	clc
 	adc #1
 	lsr
-#ifdef DEBUG
-pha
-jsr EHexout
-pla
-#endif
 	tax
-	pla
+	lda id
+	ldy id+1
 	jsr checksum
 
-#ifdef DEBUG
+#ifdef DEBUGPKT
 php
 pha
 txa
@@ -672,7 +661,7 @@ pla
 plp
 #endif
 	bcc icmpok
-	jmp discardcs
+	jmp discardics
 icmpok
 	ldy #0
 	lda (id),y		; icmp type
@@ -748,7 +737,7 @@ l0	lda MyIP-IPH_SRC,y
 	txa
 	sta (id),y
 
-#if 0	/*def DEBUG*/
+#ifdef DEBUGSEND
 DB("^m^jSend packet:^m^j")
 jsr printpacket
 tsx
@@ -759,14 +748,8 @@ jsr EHexout
 	lda ilen
 	ldy ilen+1
 	jsr btrunc
-#ifdef DEBUGMEM
-DB("btrunc'd packet^m^j")
-#endif
 	ldx islot
 	jsr queueslot
-#ifdef DEBUGMEM
-DB("queued packet^m^j")
-#endif	
 	lda #<-1
 	sta islot
 	jsr startin
@@ -776,7 +759,7 @@ DB("queued packet^m^j")
 	.)
 
 	/* computes IP header checksum and returns it in a/x */
-	/* TODO: make address (a/y) + # of 16 bit words parameter (x) */
+	/* address (a/y) + # of 16 bit words parameter (x) */
 checksum .(
 
 tmp	=sysmem
@@ -837,6 +820,7 @@ err	sec
 	rts
 	.)
 
+#ifdef DEBUGPKT
 printpacket .(
 	ldy #0
 l0
@@ -885,9 +869,8 @@ lend
 	jsr ECrlfout
 	clc
 	rts
-
-
 	.)
+#endif
 
 	.)
 

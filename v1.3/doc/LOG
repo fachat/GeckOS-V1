@@ -208,3 +208,12 @@ Ironed out some bugs in SLIP memory handling, which seems stable now.
 SLIP behaves strange when packet buffer is _not_ empty (i.e. filled
 with zero)
 
+******** OS/A 1.3.8f ******** 18oct1996 A.Fachat
+
+SLIP IP layer is stable now. Added serial device driver for UART 16550A.
+with FIFO. But still lost chars above 2400 baud :-(
+Fixed another bug in GETB, but GETB version of SLIP is way _slower_
+than GETC version!? GETC version gives PING replies in 860ms (@ 2400 baud),
+GETB version in around 1750ms.
+Serial line interrupts still increase cursor speed.
+

@@ -385,5 +385,19 @@
 #define	TPI_CREG	6
 #define	TPI_AIR		7
 
+/*	  UART 16550		   */
+
+#define	UART_RXTX	0		/* DLAB=0 */
+#define	UART_IER	1		/* DLAB=0 */
+#define	UART_DLL	0		/* divisor latch low, DLAB=1 */
+#define	UART_DLH	1		/* divisor latch high, DLAB=1 */
+#define	UART_IIR	2		/* Irq Ident. Reg., read only */
+#define	UART_FCR	2		/* FIFO Ctrl Reg., write only */
+#define	UART_LCR	3		/* Line Ctrl Reg */
+#define	UART_MCR	4		/* Modem Ctrl Reg */
+#define	UART_LSR	5		/* Line Status Reg */
+#define	UART_MSR	6		/* Modem Status Reg */
+#define	UART_SCR	7		/* 'scratchpad', i.e. unused */
+
 #endif
 
