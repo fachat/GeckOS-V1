@@ -1,10 +1,9 @@
-
 /****************************************************************************
    
-    OS/A65 Version 1.3.11
+    OS/A65 Version 1.3.12
     Multitasking Operating System for 6502 Computers
 
-    Copyright (C) 1989-1996 Andre Fachat 
+    Copyright (C) 1989-1997 Andre Fachat 
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,12 +40,12 @@ cnt	=sysmem
 end	rts
 gotblock
 	stx tmp
-	sta qp
-	sty qp+1
+	sta pp
+	sty pp+1
 
 	ldy #TCP_DOFFSET
 l0	lda cnt
-	sta (qp),y
+	sta (pp),y
 	inc cnt
 	lda cnt
 	cmp #$20
@@ -61,16 +60,16 @@ ok	iny
 
 	ldy #0
 	lda #<TCP_DOFFSET
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda #>TCP_DOFFSET
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda #64
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda #0
-	sta (qp),y
+	sta (pp),y
 
 	ldx tmp
 	jmp tx_queue_packet

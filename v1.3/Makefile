@@ -1,7 +1,7 @@
 
 
 #XAPATH=~/src/xa-2.1.0/xa
-XAPATH=xa -x
+XAPATH=xa 
 XAINPUT="..,../oadef,../oa1"
 XAOUTPUT=".."
 
@@ -10,47 +10,47 @@ XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH}
 all: gecko.rom rom ibmon mcopy c64 slip rmerr 
 
 .obj.a65:
-	(cd $%; ${XA} $%);
+	(cd $%; ${XA} -x $%);
 	
 gecko.rom: 
 	(cd gecko; make );
 	mv gecko/gecko gecko.rom
 
 rom: 
-	(cd stdrom; ${XA} rom.a65);
+	(cd stdrom; ${XA} -x rom.a65);
 
 inirom: 
-	(cd stdrom; ${XA} inirom.a65);
+	(cd stdrom; ${XA} -x inirom.a65);
 
 c64: 
-	(cd c64rom; ${XA} c64rom.a65);
+	(cd c64rom; ${XA} -x c64rom.a65);
 
 basic:
-	(cd oabasic; ${XA} oabasic4.a65);
+	(cd oabasic; ${XA} -x oabasic4.a65);
 
 ibmon:
-	(cd ibmon; ${XA} ibmon.a65);
+	(cd ibmon; ${XA} -x ibmon.a65);
 
 mcopy:
-	(cd mcopy; ${XA} mcopy.a65);
+	(cd mcopy; ${XA} -x mcopy.a65);
 
 fsiec:
-	(cd oafs; ${XA} fsiec.a65);
+	(cd oafs; ${XA} -x fsiec.a65);
 
 fsibm:
-	(cd oafs; ${XA} fsibm.a65);
+	(cd oafs; ${XA} -x fsibm.a65);
 
 fsdev:
-	(cd oafs; ${XA} fsdev.a65);
+	(cd oafs; ${XA} -x fsdev.a65);
 
 fstcp: slip
 	(cd oaslip; ${MAKE} fstcp);
 
 sh:
-	(cd oash; ${XA} sh.a65);
+	(cd oash; ${XA} -x sh.a65);
 
 slip: 
-	(cd oaslip; ${XA} slip.a65);
+	(cd oaslip; ${XA} main.a65 -o slip.obj -l slip.lab);
 
 rmerr:
 	rm -f *.lab *.err

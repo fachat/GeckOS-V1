@@ -1,0 +1,99 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.12
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1997 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+/**********************************************************************/
+/* 				SLIP				      */
+/*		Serial Line Internet Protocol Driver		      */
+/*								      */
+/* Driver connects STDIN/OUT with a serial line internet protocol     */
+/* 								      */
+/* Options:							      */
+/*   ROM							      */
+/*   NOPRG							      */
+/* 								      */
+/**********************************************************************/
+
+
+&icmp2	.(
+	jsr getpinfo
+	
+	lda pdl
+	ldy pdl+1
+	ldx #pd
+	jsr checksum3
+
+#if 0 /*def DEBUGPKT*/
+php
+pha
+txa
+pha
+DB("ICMP Checksum=")
+pla
+tay
+jsr EHexout
+pla
+pha
+jsr EHexout
+jsr ECrlfout
+tya
+tax
+pla
+plp
+#endif
+	bcc icmpok
+	jmp idisc_check
+icmpok
+	ldy #0
+	lda (pd),y		; icmp type
+	cmp #8			; echo message
+	beq echo
+	jmp idisc_type
+echo
+	/* ECHO Message */
+				; modify message to echo reply message
+	lda #0			; icmp echo reply
+	sta (pd),y
+
+	jsr pxip		; src IP -> trg IP
+
+	jsr setmyip		; my IP -> src IP
+
+	ldy #ICMP_CSUM
+	jsr setdcheck
+
+	jsr prepip
+
+	ldx pslot
+	jmp queueslot
+
+idisc_check
+	DB("ICMP: wrong checksum^m^j")
+	jmp idisc
+idisc_type
+	DB("ICMP: wrong type^m^j")
+idisc	
+	ldx pslot
+	jmp bfree
+	.)
+

@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.11
+    OS/A65 Version 1.3.12
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1997 Andre Fachat
@@ -147,16 +147,16 @@ l1
 	jsr balloc
 	bcs retnomem2
 
-	sta qp
-	sty qp+1
+	sta pp
+	sty pp+1
 	stx slot
 
 	clc
 	adc #TCP_DOFFSET
-	sta qd
+	sta pd
 	tya
 	adc #0
-	sta qd+1
+	sta pd+1
 
 	/* save stream and prepare PCBUF for sending */
 	ldy fd
@@ -171,20 +171,20 @@ l1
 
 	ldy #0
 	lda #TCP_DOFFSET
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda #0
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda len
-	sta (qp),y
+	sta (pp),y
 	iny
 	lda len+1
-	sta (qp),y
+	sta (pp),y
 
 	ldy #0
 l2	lda PCBUF,y
-	sta (qd),y
+	sta (pd),y
 	iny
 	cpy len
 	bcc l2
@@ -242,39 +242,39 @@ gotone
 	/* TODO: this implementation wants each reply in exactly one packet! */
 	ldx fsqueue
 	jsr getbadr
-	sta qp
-	sty qp+1
+	sta pp
+	sty pp+1
 
-DB("qp=")
-lda qp+1:jsr EHexout: lda qp:jsr EHexout
+DB("pp=")
+lda pp+1:jsr EHexout: lda pp:jsr EHexout
 DB(", do=")
-ldy #1: lda (qp),y: jsr EHexout
-ldy #0: lda (qp),y: jsr EHexout
+ldy #1: lda (pp),y: jsr EHexout
+ldy #0: lda (pp),y: jsr EHexout
 DB(", l=")
-ldy #3: lda (qp),y: jsr EHexout
-ldy #2: lda (qp),y: jsr EHexout
+ldy #3: lda (pp),y: jsr EHexout
+ldy #2: lda (pp),y: jsr EHexout
 jsr ECrlfout
 
 	ldy #0
-	lda (qp),y
+	lda (pp),y
 	clc
-	adc qp
-	sta qd
+	adc pp
+	sta pd
 	iny
-	lda (qp),y
-	adc qp+1
-	sta qd+1
+	lda (pp),y
+	adc pp+1
+	sta pd+1
 
 	iny
-	lda (qp),y
+	lda (pp),y
 	sta len
 	iny
-	lda (qp),y
+	lda (pp),y
 	sta len+1
 
 	/* interpret reply packet */
 	ldy #FSP_FD
-	lda (qd),y
+	lda (pd),y
 	sta fd
 	tay
 	lda status,y
@@ -287,7 +287,7 @@ illfd	DB("illegal FD^m^j")
 
 noillfd
 	ldy #FSP_LEN
-	lda (qd),y
+	lda (pd),y
 	cmp len
 	bne illlen
 	lda len+1
@@ -299,7 +299,7 @@ illlen	DB("illegal len^m^j")
 	jmp nextbuf
 noilllen
 	ldy #FSP_CMD
-	lda (qd),y
+	lda (pd),y
 	cmp #FS_REPLY
 	bne noreply
 
@@ -319,7 +319,7 @@ sec
 gotbuf
 #endif
 	ldy #FSP_DATA
-	lda (qd),y
+	lda (pd),y
 	sta PCBUF+FS_X_ERR
 	cmp #E_OK
 	bne l1
@@ -379,3 +379,4 @@ inc $d020
 	.)
 
 	.)
+

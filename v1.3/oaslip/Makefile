@@ -7,3 +7,4 @@ fstcp: fstcp.c
 
 clean:
 	rm -f fstcp
+

@@ -1,0 +1,181 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.12
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1997 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+/******************** output loop ***********************/
+
+	.(
+
+omode	=sysmem
+ol	=sysmem+1
+onslot	=sysmem+3
+oslot	=sysmem+4
+-sysmem	+=MAXOQUEUE+4
+
+op	=syszp
+-syszp	+=2
+
+&oinit	.(
+	lda #0
+	sta onslot
+	sta omode
+	clc
+	rts
+	.)
+
+&loopout .(
+	lda omode
+	bne inwork
+	ldy onslot
+	bne newpacket
+ende	rts
+newpacket
+	ldx oslot
+	jsr getbadr
+	sta op
+	sty op+1
+	jsr getblen
+	sta ol
+	sty ol+1
+	lda #1
+	sta omode
+inwork
+	cmp #1
+	bne esc1
+	lda #SL_END
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+	inc omode
+	lda omode
+esc1	
+	cmp #2
+	bne esc2
+next	ldy #0
+	lda (op),y
+	cmp #SL_END
+	beq escape
+	cmp #SL_ESC
+	beq escape
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+incp	
+	inc op
+	bne l0
+	inc op+1
+l0	lda ol
+	bne l1
+	dec ol+1
+l1	dec ol
+
+	lda ol
+	ora ol+1
+	bne next
+
+	inc omode
+	lda omode
+esc2
+	cmp #3
+	bne esc3
+	lda #SL_END
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+			; free buffer slot
+	ldx oslot
+	jsr bfree
+
+	dec onslot
+	ldy #0
+l2	cpy onslot
+	beq reset
+	lda oslot+1,y
+	sta oslot,y
+	iny
+	bne l2
+
+reset	lda #0
+	sta omode
+ende2	rts
+
+escape	lda #4
+	sta omode
+esc3
+	cmp #4
+	bne esc4
+	lda #SL_ESC
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende2
+	inc omode
+	lda omode
+esc4
+	cmp #5
+	bne reset
+	ldy #0
+	lda (op),y
+	cmp #SL_ESC
+	beq escesc
+	cmp #SL_END
+	bne wrongesc
+	lda #SL_ESC_END
+	.byt $2c
+escesc	lda #SL_ESC_ESC
+wrongesc
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende2
+	lda #2
+	sta omode
+	jmp incp
+	.)
+
+&queueslot .(	; queue slot XR for output
+	ldy onslot
+	cpy #MAXOQUEUE
+	bcs drop
+	txa
+	sta oslot,y
+	inc onslot
+
+px = syszp
+-syszp +=2
+DB("Sent packet:^m^j")
+jsr getbadr
+sta px:sty px+1
+jsr getblen
+ldx #px
+jsr printpacket2
+
+	clc
+	rts
+drop
+	DB("Packet dropped due to full queue^m^j")
+	jsr bfree
+	sec
+	rts
+	.)
+
+	.)
+
