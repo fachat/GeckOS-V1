@@ -1,0 +1,209 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.12
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+/**********************************************************************/
+/* 			     SLIP/TCP				      */
+/*		Serial Line Internet Protocol Driver		      */
+/*								      */
+/* Driver connects STDIN/OUT with a serial line internet protocol     */
+/* 								      */
+/* Options:							      */
+/*   ROM							      */
+/*   NOPRG							      */
+/* 								      */
+/**********************************************************************/
+
+#define	C64
+
+#ifndef MY_IP
+#define	MY_IP		192,168,0,13
+#endif
+#define	MAXOQUEUE	4
+#define	INBUF		64
+#define	MTU		1024
+#define	MAXSLOT		16
+#define	IPBUFFER	32*256	/* must be within one (4k) page for MMU! */
+
+#define	DEBUGMEM
+
+/**********************************************************************/
+
+#ifndef ROM
+
+#define	DEBUG
+/*#define	DEBUGMEM*/
+/*#define	DEBUGPKT*/
+
+#if 1
+#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr ETxtout:.):
+#else
+#define	DB(a)
+#endif
+
+
+#ifdef C64
+#define	STDIOADDR $f000
+#endif
+
+#include "oa1sj.a65"
+#include "oa1str.def"
+#include "oa1fs.def"
+#include "stdio.a65"
+
+PRGSTART  =$4000
+
+#endif	/* ROM */
+
+#ifndef SLIPDEV
+#define	SLIPDEV	0
+#endif
+
+
+/**********************************************************************/
+
+          .(
+#ifdef ROM
+
+          .word PRGEND
+          .byt  PK_PRG
+          .byt  8
+          .byt  SLIPDEV,SLIPDEV
+          .word PRG
+#ifndef ROMTEST
+          .byt  $8,$8,$9,$9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt $c,$1c,$d,$1d,$e,$1e,<-1
+#endif /* ROMTEST */
+
+          .byt  "shell",0,"shell b c:auto.bat",0
+
+#else /* ROM */
+
+/*------------------------------------------------------------------------*/
+
+#ifndef NOPRG
+          ;.word $800
+          *=PRGSTART
+          .word 0
+          .byt PK_PRG
+          .byt 8
+          .word 0
+          .word PRG
+          .byt <-1
+#else
+          .word PRGSTART
+          *=PRGSTART
+
+#endif /* NOPRG */
+
+#endif /* ROM */
+
+/*------------------------------------------------------------------------*/
+
+#ifndef NOMMU
+
+syszp     =$80
+sysmem    =$1800
+sysblk    =PRGSTART
+
+#endif
+
+#echo slip:
+#print sysmem
+#print sysblk
+#print syszp
+
+/**********************************************************************/
+
+owntask	=sysmem
+-sysmem	+=1
+
+PRG	.(
+
+	stx owntask
+
+	jsr binit
+	bcs exit
+DB("^m^jbinit ")
+	
+	jsr oinit
+	bcs exit
+DB("oinit ")
+
+	jsr iinit
+	bcs exit
+DB("iinit ")
+/*
+	jsr icmpinit	; there is no need for it...
+	bcs exit
+DB("icmpinit ")
+*/
+	jsr tcpinit
+	bcs exit
+DB("tcpinit ")
+	jmp doloop
+
+exit	rts
+
+doloop
+	jsr loopin
+	jsr loopout
+	jsr tcploop
+	jsr SUSPEND
+	jmp doloop
+
+	.)
+
+MyIP	.byt MY_IP
+
+#include "sltcp.def"
+
+#include "slipi.a65"
+#include "slipo.a65"
+
+/* protocols can share same variables */
+	.(
+pp	=syszp
+pd	=syszp+2
+-syszp	+=4
+pslot	=sysmem
+phl	=sysmem+1
+ppl	=sysmem+2
+pdl	=sysmem+4
+-sysmem	+=6
+
+#include "icmp.a65"
+#include "tcp.a65"
+#include "putil.a65"
+	.)
+
+#include "mem.a65"
+#include "util.a65"
+
+#print sysmem
+#print sysblk
+#print syszp
+
+PRGEND    .)
+
