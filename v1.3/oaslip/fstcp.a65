@@ -39,11 +39,12 @@ fstask	=sysmem
 fsqueue	=sysmem
 -sysmem	+=MAXQUEUE
 fsnq	=sysmem
--sysmem	+=1
+signal	=sysmem+1
+-sysmem	+=2
 
 fstcp_srv 
         .byte 192,168,0,1, 31, 154, 0,0, 0
-        .word fstcp_queue-1, fstcp_loop-1
+        .word fstcp_queue-1, fstcp_loop-1, fstcp_signal-1
 
 &fstcp_init .(
 #ifndef MMU
@@ -102,6 +103,7 @@ foops	sec
 fstcp_loop .(
 	jsr rxloop
 	jsr qloop
+	jsr dloop
 	rts
 	.)
 
@@ -111,6 +113,11 @@ len	=sysmem+2
 slot	=sysmem+4
 fd	=sysmem+5
 -sysmem	+=6
+
+	/* check streams and get/put data */
+dloop	.(
+	rts
+	.)
 
 rxloop	.(
 
@@ -214,7 +221,6 @@ retnofil
 	ldx task
 	jsr SEND
 	rts
-	
 	.)
 
 getfd	.(
@@ -342,9 +348,16 @@ l1
 
 	ldx fsqueue
 	jsr bfree
-ende	
+	jmp nextbuf
 	
-noreply	DB("packet not a reply!^m^j")
+noreply	cmp #FS_WRITE
+	bne nowrite
+	
+nowrite
+	DB("packet not a reply!^m^j")
+	ldx fsqueue
+	jsr bfree
+
 nextbuf		
 	ldy #1
 l0	lda fsqueue,y
@@ -357,6 +370,12 @@ l0	lda fsqueue,y
 	dec fsnq
 	jmp qloop
 
+	.)
+
+fstcp_signal .(
+inc $d020
+	sta signal
+	rts
 	.)
 
 	.)

@@ -220,7 +220,8 @@ edev      ldx #HE_DEV
           lda #SYS_EXTIO
 #endif
           sta SYSPORT
-
+#endif
+#ifdef LEDPORT
           jsr LEDOFF
 #endif
 
@@ -282,6 +283,7 @@ startloop
 
 #ifndef C64
 #ifdef ROMTEST
+#ifndef NOMMU
           ldx MMU+8
           jsr GETBLK
           ldx MMU+9
@@ -298,6 +300,7 @@ startloop
           jsr GETBLK
           ldx MMU+$f
           jsr GETBLK
+#endif
 #endif
 #endif
           jmp pstart
@@ -463,10 +466,10 @@ inext     ldy #0
           stx pz
           jmp startloop
 
-#ifndef NOSYSPORT
-+LEDOFF   lda SYSPORT
-          ora #SYS_LED
-          sta SYSPORT
+#ifdef LEDPORT
++LEDOFF   lda LEDPORT
+          ora #LED_LED
+          sta LEDPORT
           rts
 #endif
 /*
@@ -477,14 +480,17 @@ inext     ldy #0
 */
 +HERROR   .(        ; xr=Fehlernummer -1=1mal aus, -2=2mal aus etc
 #ifndef C64
+/*
 #ifndef NOSYSPORT
-          LDA SYSPORT:ORA #SYS_LED
-          STA SYSPORT
+*/
+#ifdef LEDPORT
+          LDA LEDPORT:EOR #LED_LED
+          STA LEDPORT
           LDY #0:TYA
 PRE2      ADC #1:BNE PRE2
           INY:BNE PRE2
-          LDA SYSPORT:AND #$FF-SYS_LED
-          STA SYSPORT
+          LDA LEDPORT:EOR #LED_LED
+          STA LEDPORT
           LDA #0:TAY
 PRE3      ADC #1:BNE PRE3:INY
           BNE PRE3:inx:BNE HERROR

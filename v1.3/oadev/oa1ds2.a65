@@ -145,6 +145,8 @@ devini    lda #0
 	sta UART+UART_FCR		; trigger at 1 byte
 	lda #0
 	sta UART+UART_IER		; polled mode (so far) 
+	lda UART+UART_MCR
+	and #%00001100			; keep OUT1, OUT2 values
 	sta UART+UART_MCR		; reset DTR, RTS
 
           clc

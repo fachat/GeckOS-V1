@@ -1,0 +1,111 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.11
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1997 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+
+#include  "../oadef/oa1str.def"
+#include  "../oadef/oa1con.def"
+#include  "../oadef/oa1sj.a65"
+
+          .word $400
+          *=$400
+          
+l1        =$0
+			 	; exit all devices
+          lda #0
+          sta l1
+l2        ldx l1
+          lda #DC_EXIT
+          jsr DEVCMD
+          inc l1
+          lda l1
+          cmp #16
+          bcc l2
+				; disable timer interrupt
+          lda SYSPORT
+          and #$ff-SYS_IRQEN
+          sta SYSPORT
+
+          sei			; remap MMU pages 8-15 with values from 
+          ldx #8		; 4 to c
+l3        lda $eff4,x
+          sta $eff8,x
+          dex
+          bpl l3
+
+          ldx #1		; set MMU pages 1-7 to 1-7
+l4        txa
+          sta $eff0,x
+          inx
+          cpx #$8
+          bcc l4
+
+          ldx #0		; copy program to valid RAM
+l5        lda data,x
+          sta $1000,x
+          inx
+          bne l5
+          
+          jmp $1000		; and jump there
+          
+data      
+	  lda #0		; remap page 0
+          sta $eff0
+	  lda #$0b
+	  sta $eff7		; map $0e000 to $07000 for ext. I/O
+	  lda #$2e
+	  sta $effe
+	  lda SYSPORT
+	  ora #%00100000	; ioinh
+	  and #%11101111	; extio
+	  sta SYSPORT
+
+	lda $7fe0
+	eor #%00001000
+	sta $7fe0
+
+	ldx #0
+	ldy #0
+x0	dey
+	bne x0
+	dex
+	bne x0
+	
+	lda $7fe0
+	eor #%00001000
+	sta $7fe0
+
+	ldx #0
+	ldy #0
+x1	dey
+	bne x1
+	dex
+	bne x1
+
+lda #$0f
+;sta $7fff
+lda #%00100000
+sta $7fe0
+
+          jmp RESET
+

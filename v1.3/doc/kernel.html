@@ -1,5 +1,6 @@
-<title> OS/A65 Kernel Interface Description </title><body>
-<body>
+<html><head>
+<title> OS/A65 Kernel Interface Description </title>
+</head><body>
 <p><h1 align=center> OS/A65 Kernel Interface Description </h1></p>
 <p> <h2 align=center> (c) 1989-96 Andre Fachat </h2></p>
 <hr>
@@ -119,7 +120,7 @@ $f027	DEVCMD	executes device commands. parameter: device number in x,
 					following:
 
 		
-		REGDEV_ADR ->  	2 byte pointer to label1
+		REGDEV_ADR -&gt   2 byte pointer to label1
 				JMP Start_of_1st_device
 				Name_of_device,0
 				...
@@ -296,9 +297,9 @@ $f06f	SETNMI	in systems without MMU, set the system NMI routine address.
 		Task calls SETNMI with NEWNMI in a/y. We then have the 
 		structure:
 
-		(NEWNMI-4)	address of oldvec -->   address of OLDNMI
+		(NEWNMI-4)	address of oldvec --&gt   address of OLDNMI
 		(NEWNMI-2)	address of nmictrl			
-		NEWNMI -->  	NMI routine code
+		NEWNMI --&gt  	NMI routine code
 
 		This way the structure can be held in ROM, and still allow
 		flexible NMI chaining. If CTRLNMI is called, each of the 
@@ -388,7 +389,7 @@ except filesystem stuff are defined):
 
 #define   E_NOCLUS  &lt;-72      /* kein Cluster mehr frei               */
 #define   E_INVDATA &lt;-73      /* inkonsistente Daten auf der Diskette */
-#define   E_ILLCLUS &lt;-74      /* Cluster =1 oder >F_CLUS              */
+#define   E_ILLCLUS &lt;-74      /* Cluster =1 oder &gt; F_CLUS             */
 #define   E_VALBUF  &lt;-75      /* versucht gÅltigen Sektor mit XW zu schreiben   */
 #define   E_FILEXIST &lt;-76     /* Datei gibt es schon                  */
 #define   E_DISKFULL &lt;-77     /* Diskette voll                        */
@@ -480,3 +481,4 @@ Reserved system environment numbers:
 
 </pre>
 </body>
+</html>
