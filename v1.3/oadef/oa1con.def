@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -73,7 +73,11 @@
 
 /*        EnvData                       */
 
+#ifndef STACKCOPY
 #define   ANZENV    5         /* (Stackpage-56)/40          */
+#else
+#define	  ANZENV    8	      /* (up to 16 is possible, if enough memory) */
+#endif
 #define   ANZXENV   5         /* Anzahl umleitbarer Tasks   */
 
 /*        TaskData                      */

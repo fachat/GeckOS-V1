@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.6
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -46,6 +46,8 @@
 /*     CLK2MHZ      Falls NOSYSPORT wird hier der Wert, der an Devices    */
 /*                  gesendet wird, festgelegt.                            */
 /*     NMIDEV       erm”glicht Behandlung von nmi's - aber nur ohne MMU   */
+/*     STACKCOPY    without MMU, split stack in 2 pieces only and save    */
+/*                  task stack each time the context is switched          */
 /**************************************************************************/
 
 
@@ -75,7 +77,11 @@ start     =$1000
 -sysblk   =$1000
 #else
 -sysmem   =$300
+#ifdef STACKCOPY
+-sysblk	  =$1000
+#else
 -sysblk   =$800
+#endif
 #endif
 
 #ifndef OLDROM
@@ -86,7 +92,7 @@ start     =$1000
 
 #define   D_Y       96
 #define   D_M       10
-#define   D_D       13
+#define   D_D       19
 
 #else
 

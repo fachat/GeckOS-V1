@@ -1,7 +1,7 @@
 
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -44,6 +44,12 @@
 
 #define	CLEARMEM	0	/* Clear memory to 0 on boot, C64 only */
 
+#define	STACKCOPY		/* if defined, save stack area in memory
+				   when context switching, otherwise divide
+				   stack area and give each task a part.
+				   It's faster without, but allows more
+				   tasks with */
+
 /*#define NMIDEV*/
 /*#define C64NEEDCIA1*/		/* disables reading CIA1 ICR in kernel -
 				   needs to be done in device then, as
@@ -71,9 +77,15 @@
 #include  "c64def.a65"
 
 #ifdef NOMMU
+#ifdef STACKCOPY
+syszp     =$20		/* allocated upward, below is for kernel */
+sysmem    =$1000	/* allocated upward, $300-$1000 is for kernel */
+sysblk    =$1800	/* allocated downward */
+#else
 sysmem    =$800		/* allocated upward, $300-$800 is for kernel */
 syszp     =$20		/* allocated upward, below is for kernel */
 sysblk    =$1000	/* allocated downward */
+#endif
 #endif
 
 
