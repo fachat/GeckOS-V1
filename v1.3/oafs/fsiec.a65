@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -81,10 +81,6 @@
 #define	  ANZDRV    4
 #endif
 
-#ifdef OLDROM
-#define   IECBUF    $100		/* only for MMU! */
-#endif
-
 #define   MAXLEN    64
 
 #define   MAXFILE   6
@@ -120,10 +116,8 @@
 
 -sysblk   -=MAXFILE*BUFSIZE
 
-#ifndef OLDROM
 IECBUF	  =sysmem
 -sysmem   +=MAXLEN
-#endif
 
 fzei      =syszp
 bzei      =syszp+2
@@ -154,7 +148,6 @@ PRG       .(
           sta showcnt
 #endif
 
-#ifndef OLDROM			/* get the resource (interface) */
 	  sec
 #ifdef PARALLEL
 	  ldx #SEM_PARIEC
@@ -165,7 +158,6 @@ PRG       .(
 	  bcc sem_ok
 	  jmp TERM
 sem_ok
-#endif
 
           jsr IECINIT		/* init interface */
           bcs term
@@ -222,7 +214,6 @@ x1        jsr fragti
 
           jmp loop
 term      
-#ifndef OLDROM
 	  pha
 #ifdef PARALLEL
 	  ldx #SEM_PARIEC
@@ -231,7 +222,6 @@ term
 #endif
 	  jsr VSEM
 	  pla
-#endif
 	  jmp TERM
 
 
@@ -332,13 +322,11 @@ loop
 #ifdef NOFS
           jmp loop
 #else
-#ifndef OLDROM
 	  lda anz		; check if we have open files
 	  bne l1xxx		; if no then
 	  sec			; block while trying to RECEIVE
 	  .byt $24
 l1xxx
-#endif
           clc
           jsr RECEIVE		; check for fs command
           bcs l1
@@ -362,7 +350,7 @@ l2a       inc anz
           bne l3
 
 ol
-#ifndef OLDROM
+#if 1	/*ndef OLDROM*/
 b2zei 	=syszp
 -syszp  +=2
 	  ldy #F_LEN
@@ -446,7 +434,7 @@ l5n       cmp #E_NUL
 l3        cmp #F_MODE_WR
           bne l8
 il          
-#ifndef OLDROM
+#if 1 	/*ndef OLDROM*/
 	  lda #BUFSIZE
 	  sec
 	  ldy #F_BYT
@@ -810,7 +798,6 @@ rx1aa     lda PCBUF+FS_OPEN_PFAD
           ldy #F_STR
           sta (fzei),y
 
-#ifndef OLDROM
 	.(
 	; remove leading DIRSIGN, as all names are assumed global
 	lda PCBUF+FS_OPEN_NAME
@@ -823,7 +810,6 @@ l0	iny
 	bne l0
 noglobal
 	.)
-#endif
           lda PCBUF+FS_OPEN_NAME
           bne xx1a
           sta PCBUF+FS_OPEN_NAME+1
@@ -1049,10 +1035,6 @@ sfn3      lda #","
           pla
           sta PCBUF+FS_OPEN_NAME,y
           iny
-#ifdef OLDROM
-          tya
-          ldx #<PCBUF+FS_OPEN_NAME
-#else
 	  ldx #<PCBUF+FS_OPEN_NAME
 	  lda PCBUF+FS_OPEN_NAME
 	  cmp #DIRSIGN
@@ -1061,7 +1043,6 @@ sfn3      lda #","
 	  inx
 sfnn
 	  tya
-#endif
           ldy #>PCBUF+FS_OPEN_NAME
           jmp SETFNPAR
           .)

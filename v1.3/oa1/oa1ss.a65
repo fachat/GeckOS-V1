@@ -37,12 +37,8 @@
           .(
 
 SZEI      =syszp
-#ifdef OLDROM
--syszp	  +=2
-#else
 BZEI	  =syszp+2
 -syszp    +=4
-#endif
           
 #ifdef NOMMU
 SYR       =sysmem
@@ -60,7 +56,6 @@ STRM      =syszp+2
 
 blocks    =sysblk
 
-#ifndef OLDROM
 	  .(
 &&getb    .(
           php
@@ -246,7 +241,6 @@ end
           .)
 
 	  .)
-#endif			/* oldrom */
 
           .(
 &&inistream 
