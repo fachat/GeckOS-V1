@@ -272,6 +272,7 @@ plp
 
 /* free buffer (ID=xr) */
 &bfree	.( 
+/*clc:rts*/
 &bfree2
 	cpx #MAXSLOT
 	bcc okfree

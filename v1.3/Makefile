@@ -5,7 +5,7 @@ XAPATH=xa -x
 XAINPUT="..,../oadef,../oa1"
 XAOUTPUT=".."
 
-XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH} -C
+XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH} 
 
 all: rom ibmon mcopy c64 slip rmerr 
 

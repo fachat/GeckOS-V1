@@ -68,12 +68,15 @@
 #define	TCB_NTXBUF	40	/* number of buffers in retranmission buffer */
 #define	TCB_TXBUF	41	/* retransmission buffer */
 
-#define	TCB_LEN		41+TCP_MAXTXB
+#define	TCB_LEN		(41+TCP_MAXTXB)
 
 #define	TCPWIN		512	/* we have a receive window of this size */
 #define	TCPSEG		256	/* we send maximal TCPSEG sized segments */
 
 #define	TCP_OFFSET	8	/* offset from IP hdr start to TCP pseudo hdr */
+
+				/* where does TCP data start in IP packet? */
+#define	TCP_DOFFSET	(TCP_OFFSET+TH_OPTIONS)
 
 /* service struct */
 #define	SRV_RIP		0	/* SRV_RIP must be == TCB_SRCIP */
@@ -82,7 +85,8 @@
 #define	SRV_FLAG	8	/* service flags */
 #define	SRV_QUEUE	9	/* routine to queue packets for this service */
 				/* routine gets packet slot in x, tcbp & srv */
-#define	SRV_LEN		11
+#define	SRV_LOOP	11	/* loop routine */
+#define	SRV_LEN		13
 
 /* service flags */
 #define	SFL_MULT	1	/* if set, immediately set up listening  */

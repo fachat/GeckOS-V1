@@ -112,6 +112,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	while(1) {
+	  client_addr_len = sizeof(client_addr);
 	  fd = accept(sock,(struct sockaddr*)&client_addr, &client_addr_len);
 	  if(fd<0) {
 	    fprintf(stderr, "Could not accept, errno=%d (%s)!\n",

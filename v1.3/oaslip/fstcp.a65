@@ -1,0 +1,124 @@
+
+	.(
+
+fstcp_srv 
+        .byte 192,168,0,1, 31, 154, 0,0, 0
+        .word fstcp_queue-1, fstcp_loop-1
+
+&fstcp_init .(
+#ifndef MMU
+	ldx #SEM_SENDBUF
+	clc
+	jsr PSEM
+#endif
+	lda #1
+	sta PCBUF+FM_REG_DRVS
+	lda owntask
+	sta PCBUF+FM_REG_ENV
+	ldx #SEND_FM
+	lda #FM_REG
+	ldy #2
+	jsr SEND
+#ifndef MMU
+	php
+	ldx #SEM_SENDBUF
+	jsr VSEM
+	plp
+#endif
+	bcc ok
+	jmp TERM
+ok
+        lda #<fstcp_srv
+        ldy #>fstcp_srv
+        jsr tcp_open
+
+	rts
+	.)
+
+fstcp_queue .(
+	jmp bfree
+	.)
+
+fstcp_loop .(
+	jsr rxloop
+	rts
+	.)
+
+rxloop	.(
+
+task	=sysmem
+cmd	=sysmem+1
+len	=sysmem+2
+slot	=sysmem+4
+-sysmem	+=5
+
+	clc
+	jsr RECEIVE
+	bcc ok
+	rts
+ok
+	stx task
+	sty len
+	sta cmd
+
+	/* interprete received request */
+
+	tya
+	ldy #0
+	clc
+	adc #TCP_DOFFSET
+	bcc l1
+	iny
+l1
+	jsr balloc
+	bcs retnomem
+
+	sta qp
+	sty qp+1
+	stx slot
+
+	clc
+	adc #TCP_DOFFSET
+	sta qd
+	tya
+	adc #0
+	sta qd+1
+
+	ldy #0
+	lda #TCP_DOFFSET
+	sta (qp),y
+	iny
+	lda #0
+	sta (qp),y
+	iny
+	lda len
+	sta (qp),y
+	iny
+	lda len+1
+	sta (qp),y
+
+	ldy #0
+l2	lda PCBUF,y
+	sta (qd),y
+	iny
+	cpy len
+	bcc l2
+
+	ldx slot
+	jsr tx_queue_packet
+
+	/* release SENDBUF, and keep waiting till timeout or whatever */
+
+	lda #E_OK
+	.byt $2c
+retnomem
+	lda #E_NOMEM
+	sta PCBUF+FS_X_ERR
+	ldy #1
+	ldx task
+	jsr SEND
+	rts
+	
+	.)
+
+	.)
