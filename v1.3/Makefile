@@ -5,10 +5,16 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" xa
 
-all: rom basic ibmon mcopy fsiec fsibm fsdev sh rmerr
+all: rom ibmon mcopy c64 rmerr 
 
+.OBJ.a65:
+	(cd $%; ${XA} $%);
+	
 rom: 
 	(cd stdrom; ${XA} rom.a65);
+
+c64: 
+	(cd c64rom; ${XA} c64rom.a65);
 
 basic:
 	(cd oabasic; ${XA} oabasic4.a65);
@@ -32,8 +38,8 @@ sh:
 	(cd oash; ${XA} sh.a65);
 
 rmerr:
-	rm -f *.LAB *.ERR
+	rm -f *.lab *.err
 
 clean: rmerr
-	rm -f *.OBJ
+	rm -f *.obj
 

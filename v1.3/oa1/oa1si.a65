@@ -1,3 +1,26 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
 
           .(
 pz        =syszp
@@ -27,7 +50,9 @@ mmu       .byt SYSPAGE,1,2,3,4,5,6,7,8,9,$a,$b,$c,$d,$e,$f
           ldx #<-1
 #endif
           txs
-     
+ 
+#ifndef C64		/* on a C64 we pretty well know what we have */
+    
 #ifndef ROMTEST
 
 #ifndef NOMMU
@@ -54,7 +79,7 @@ mtl1      lda #$55
           inx
           bne mtl1
 
-          ; GESPIEGELTER SPEICHER TESTEN 256-Byte-weise
+          ; test mirrored memory, 256-byte-wise
 
 #ifndef NOMIRRORMEM
           lda #0
@@ -78,12 +103,12 @@ m1
           sta (pz),y
 #endif
           inc pz+1
-          bpl m1         ; bis 32 kByte
+          bpl m1         ; up to 32 kByte
 
 me        lda pz+1
 #else
           lda #$80
-#endif
+#endif 			/* NOMIRRORMEM */
           sta cnt
           lda #1
           sta pz+1
@@ -115,9 +140,40 @@ mtlx
           cmp cnt
           bcc mtlx
 mtly      lda pz+1
+
 #else
           lda #32
+#endif			/* ROMTEST */
+
+#else
+	  lda #7
+	  sta 0		/* CPU data direction register */
+	  lda #5
+	  sta 1		/* Memory configuration */
+
+#ifdef CLEARMEM
+	  lda #CLEARMEM
+	  ldy #2
+clear1	  sta 0,y
+	  iny 
+	  bne clear1
+	  ldx #1
+	  stx 3
+clear2	  sta (2),y
+	  iny
+	  bne clear2
+	  inc 3
+	  ldx 3
+#if ROMSTART > $d000
+	  cpx #$d0	/* keep I/O save */
+#else
+	  cpx #>ROMSTART
 #endif
+	  bcc clear2	  
+#endif			/* CLEARMEM */
+	  lda #>ROMSTART
+#endif			/* C64 */
+
 #ifndef NOMMU
           cmp #32        ; 8 k
 #else
@@ -156,6 +212,7 @@ edev      ldx #HE_DEV
 #endif
           jsr getfreq
           sta s1
+
 #ifndef NOSYSPORT
 #ifndef NOSINPORT
           lda #SYS_IRQEN+SYS_EXTIO
@@ -166,6 +223,24 @@ edev      ldx #HE_DEV
 
           jsr LEDOFF
 #endif
+
+;----------------------------------------------------------------------
+/* 
+ * C64 specific irq timer init, irq every 20ms 
+ * We assume that the reset - or a loader program has disabled all irq 
+ */
+#ifdef C64		
+	  lda #<20000
+	  sta C64CIA1+CIA_TBL	; load low byte
+	  lda #>20000
+	  sta C64CIA1+CIA_TBH	; load hi byte of counter value
+ 	  lda #%00010001
+	  sta C64CIA1+CIA_CRB	; start counter, counting system pulses 
+	  lda #%10000010	
+	  sta C64CIA1+CIA_ICR	; allow irq
+#endif /* C64 */
+;----------------------------------------------------------------------
+
 #ifdef NOMMU
 #ifdef NMIDEV
           jsr ininmi
@@ -191,17 +266,21 @@ xl        dec cnt
           jsr ENMEM
           jmp xl
 
-x1        lda #<PRGSTART
+x1        lda #<ROMSTART
           sta pz
-          lda #>PRGSTART
+          lda #>ROMSTART
           sta pz+1
-startloop ldy #0
+startloop 
+;	  .byt 2		; x64 trap...
+
+	  ldy #0
           lda (pz),y
           iny
           and (pz),y
           cmp #$ff
           bne slx1
 
+#ifndef C64
 #ifdef ROMTEST
           ldx MMU+8
           jsr GETBLK
@@ -219,6 +298,7 @@ startloop ldy #0
           jsr GETBLK
           ldx MMU+$f
           jsr GETBLK
+#endif
 #endif
           jmp pstart
 xerr      jmp edev
@@ -384,6 +464,7 @@ inext     ldy #0
           rts
 */
 +HERROR   .(        ; xr=Fehlernummer -1=1mal aus, -2=2mal aus etc
+#ifndef C64
 #ifndef NOSYSPORT
           LDA SYSPORT:ORA #SYS_LED
           STA SYSPORT
@@ -401,6 +482,28 @@ pre5      adc #1:bne pre5
           iny:bne pre5
           dex:bne pre5
 #endif
+#else /* C64 */
+;----------------------------------------------------------------------
+/* 
+ * in the C64 we blink the border color of the screen to indicate 
+ * hardware or init errors 
+ */
+	  lda #0:sta C64VIC+VIC_EXT_COL
+          LDY #0:TYA
+PRE2      ADC #1:BNE PRE2
+          INY:BNE PRE2
+	  inc C64VIC+VIC_EXT_COL
+          LDA #0:TAY
+PRE3      ADC #1:BNE PRE3:INY
+          BNE PRE3:inx:BNE HERROR
+	  lda #0:sta C64VIC+VIC_EXT_COL
+          ldx #15
+          lda #0:tay
+pre5      adc #1:bne pre5
+          iny:bne pre5
+          dex:bne pre5
+;----------------------------------------------------------------------
+#endif /* C64 */
           JMP RESET 
           .)
 
@@ -476,7 +579,7 @@ pb1
           
 #ifndef NOSYSPORT
 #ifndef NOSINPORT
-          lda SYSPORT    ; Timer-IRQ merken
+          lda SYSPORT    ; save timer-irq state
           pha
 #endif
 #endif
@@ -490,22 +593,36 @@ il        jsr irqdev
 #ifndef NOSYSPORT
 #ifndef NOSINPORT
           pla
-          ora SYSPORT    ; jetzt vielleicht Timer-IRQ ?
-          pha            ; merken
+          ora SYSPORT    ; no timer-irq?
+          pha            ; save it
           
           lda SYSPORT
-          sta SYSPORT    ; Timer-IRQ l”schen
+          sta SYSPORT    ; clean timer-irq
 
-          jsr testirq    ; immer noch IRQ
-          beq il         ; ja dann gleich wieder in Loop
+          jsr testirq    ; irq line still set?
+          beq il         ; yes, than back to loop
 
           pla
-          bpl endirq     ; kein Timer-IRQ -> kein Task-Wechsel
+          bpl endirq     ; no timer-irq -> no task switch!
 #endif
+#endif
+
+#ifdef C64
+;----------------------------------------------------------------------
+/* 
+ * as we have set the CIA1 TB irq in the kernel, we have to clear the
+ * CIA interrupt flag. This is done with reading the ICRegister.
+ * With C64NEEDCIA1 one can disable reading the ICR here. But then you
+ * have to have a device that does it!
+ */
+#ifndef C64NEEDCIA1
+	  lda C64CIA1+CIA_ICR	; clear irq flag 
+#endif
+;----------------------------------------------------------------------
 #endif
 
           bit adev       
-          bpl endirq     ; Device Interupted -> kein Task-Wechsel
+          bpl endirq     ; Device Interupted -> no Task-switch
           jmp irqloop
 
 +endirq   jsr memtask

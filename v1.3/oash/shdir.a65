@@ -1,8 +1,32 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
 
 
+#ifndef flag_data
 #define   flag_data      %00000001
 #define   flag_page      %00000010
 #define   ANZ_DRV        26
+#endif
 
           .(
 &tpstr    =sysmem
@@ -37,7 +61,24 @@ fz        =syszp
 tpe       ldx tpstr                     /* Stream-Nummer als Returnwert */
           rts
 
-&openf    sta cmd
+&openf    
+#ifdef NOMMU
+	  pha
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+	  pla
+	  jsr xopenf
+	  php
+	  pha
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  pla
+	  plp
+	  rts
+xopenf
+#endif 
+	  sta cmd
           ;jsr getdrv
           ;bcs tpfa
           ldy LZEI                      /* Parameter fÅr xsetname       */
@@ -227,7 +268,12 @@ lbde
           ldy #4
           sec
           jsr SETBLK     
-          lda fh+P_TAB   ; Device anmelden
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#endif  
+          lda fh+P_TAB   	; register device
           sta PCBUF+REGDEV_MPOS
           lda fh+P_TAB+1
           sta PCBUF+REGDEV_MBLK
@@ -237,6 +283,10 @@ lbde
           sta PCBUF+REGDEV_ADR+1
           lda #DC_REGDEV
           jsr DEVCMD
+#ifdef NOMMU
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+#endif
           jsr tpf
           clc
           rts
@@ -252,7 +302,8 @@ lbfs      .(
           sta stdout
           sta stderr
           
-&lbprg    ldy fh+P_MEM
+&lbprg    
+	  ldy fh+P_MEM
           jsr GETENV     ; Environment holen
           bcs tpfx       ; fehler ->SC_NUL+clstdxxx
           stx tpenv
@@ -310,7 +361,11 @@ lbm2      lda fh+P_ADR
           sta fz
           lda fh+P_ADR+1
           sta fz+1
-lbm4      ldx tpstr
+lbm4      			; This loop is a bad thing. I should copy
+				; a loader to the new environment and let
+				; let it load from there instead of
+				; putting the whole file there with WRITE...
+	  ldx tpstr
           jsr IN
           bcs lbm5       ; Ende der Datei
           ldx #fz
@@ -338,6 +393,11 @@ la1       cmp #"|"
           bcs lbeyt      ; FreEnv+clstdxxx+test pipe (StdIn-Stream)
           stx stdout
 la2       
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF	; get send buffer 
+	  jsr PSEM
+#endif
           lda lzei       ; start des Namens
           sta LZEI
           jsr getdrv     ; drive Åberspringen
@@ -424,6 +484,10 @@ endnam    stx LZEI
           ldy tplen
           jsr FORK            ; Task starten
 
+#ifdef NOMMU
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+#endif
           jsr clrstdin
           lda stdout
           sta stdin
@@ -738,6 +802,18 @@ pfe       rts
           .)
           
 FORMAT    .(
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+	  jsr format_
+	  php
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  plp
+	  rts
+format_
+#endif
           ldy LZEI
           lda IOBUF,y
           cmp #"/"
@@ -776,19 +852,31 @@ f2        ;sta tpdrv
 dcmd      =sysmem
 -sysmem   +=1
 
+#ifdef NOMMU
+	  pha
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+	  pla
+#endif
           ldx #0
           sta dcmd
           stx PCBUF+FS_CMD_PFAD
-          ;jsr getdrv
-          ;bcc d1
-          ;rts
 d1        ldy LZEI
-          ;ldy #FS_CMD_NAME
           jsr xsetname
-          ;sta tpdrv
-          ;sta PCBUF+FS_CMD_DRV
+#ifdef NOMMU
+	  jsr fx
+	  php
+	  pha
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  pla
+	  plp
+	  rts
+#endif
+
 fx        lda dcmd
-+sxcmd    pha
+&sxcmd    pha
           txa
           tay
           pla
@@ -802,10 +890,12 @@ dx        cmp #1
           .)
 
 RENAME    .(
-          ;jsr getdrv
-          ;bcc r1
-          ;rts
-r1        ldy LZEI
+#ifdef NOMMU
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#endif
+          ldy LZEI
           ;ldy #FS_CMD_NAME
           jsr xsetname
           ;sta PCBUF+FS_CMD_DRV
@@ -814,7 +904,18 @@ r1        ldy LZEI
           lda #0;jsr getpfad
           sta PCBUF+FS_CMD_PFAD
           lda #FS_RENAME
+#ifdef NOMMU
+	  jsr sxcmd
+	  php
+	  pha
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  pla
+	  plp
+	  rts
+#else
           jmp sxcmd
+#endif
           .)
 
 #endif
@@ -853,10 +954,18 @@ d1        cmp #"D"
 d2        cmp #" "
           bne d0
 de        sty LZEI
-          ;jsr getdrv
-          ;bcc d1x
-          ;lda #<-1
-d1x       ;sta PCBUF+FS_OPEN_DRV
+#ifdef NOMMU		
+				; This should be reworked for not
+				; blocking the send buffer all the time:
+PC_BUF=IOBUF		; done...
+
+	  clc
+	  ldx #SEM_SENDBUF
+	  jsr PSEM
+#else
+PC_BUF=PCBUF
+#endif
+
           ldy LZEI
           ;ldy #FS_CMD_NAME
           jsr xsetname
@@ -877,18 +986,42 @@ d1x       ;sta PCBUF+FS_OPEN_DRV
           bcs dirf
           sec
           jsr RECEIVE
+#ifndef NOMMU
           cmp #1
           bcs dirf
+#else
+	pha
+#endif
           jsr setout
+#ifdef NOMMU
+	ldx #SEM_SENDBUF
+	jsr VSEM
+	pla
+	cmp #1
+	bcs dirf
+#endif
           jsr showloop
 dirf      pha
           ldx dirstr
           jsr FRESTR
           pla
           cmp #1
-dire      rts
+#ifdef NOMMU
+	rts
+#endif
+dire      
+#ifdef NOMMU
+	  php
+	  pha
+	  ldx #SEM_SENDBUF
+	  jsr VSEM
+	  pla
+	  plp
+#endif
+	  rts
 
-showloop  lda #0
+showloop  .(
+	  lda #0
           sta count
 sloop slp ldy #0
           ldx dirstr
@@ -899,8 +1032,21 @@ sloop slp ldy #0
 sl1       ldx dirstr
           jsr IN
           bcs sle
-slp2      sta PCBUF,y
+slp2      sta PC_BUF,y
           iny
+#ifdef NOMMU
+	cpy #MAXLEN
+	bcc llll0
+	dey
+	lda #0
+	sta PC_BUF,y
+	iny
+llll1	jsr IN
+	bcs sle
+	cmp #0
+	bne llll1
+llll0
+#endif
           cpy #FS_DIR_NAME
           beq sl1
           bcc sl1
@@ -909,7 +1055,7 @@ slp2      sta PCBUF,y
 
           jsr CRLFOUT
 
-          lda PCBUF+FS_DIR_MODE
+          lda PC_BUF+FS_DIR_MODE
           cmp #FS_DIR_MOD_FRE
           beq sl00
           cmp #FS_DIR_MOD_NAM
@@ -924,7 +1070,7 @@ sl00      lda flag
 
 sle       rts
 sl0       ldy #FS_DIR_NAME
-sl2       lda PCBUF,y
+sl2       lda PC_BUF,y
           beq sl13
           jsr SEROUT
           iny
@@ -938,7 +1084,7 @@ sl3a      cpy #24+FS_DIR_NAME
           jsr SEROUT
           iny
           bne sl3a
-sl14      lda PCBUF+FS_DIR_MODE
+sl14      lda PC_BUF+FS_DIR_MODE
           cmp #FS_DIR_MOD_FIL
           bne sl15
           jsr showlen
@@ -975,35 +1121,41 @@ showfre   jsr showlenx
           jsr TSERO
           jmp sll
 
-showlenx  lda #<PCBUF+FS_DIR_LEN
-          ldy #>PCBUF+FS_DIR_LEN
+showlenx  lda #<PC_BUF+FS_DIR_LEN
+          ldy #>PC_BUF+FS_DIR_LEN
           ldx #" "
           jmp ldezout
 
 showlen   jsr showlenx
+#ifdef SHORTLINE
+	  rts
+#else
           jsr SSPOUT
-          lda PCBUF+FS_DIR_DAY
+          lda PC_BUF+FS_DIR_DAY
           jsr DEZOUT
           jsr PNTOUT
-          lda PCBUF+FS_DIR_MONTH
+          lda PC_BUF+FS_DIR_MONTH
           jsr DEZOUT
           jsr PNTOUT
-          lda PCBUF+FS_DIR_YEAR
+          lda PC_BUF+FS_DIR_YEAR
           jsr DEZOUT
           jsr SSPOUT
-          lda PCBUF+FS_DIR_HOUR
+          lda PC_BUF+FS_DIR_HOUR
           jsr DEZOUT
           lda #":"
           jsr SEROUT
-          lda PCBUF+FS_DIR_MIN
+          lda PC_BUF+FS_DIR_MIN
           jmp DEZOUT
+#endif
 
 dirtxt    .asc "<DIR>^@"
 namtxt    .asc "<NAME>^@"
 fretxt    .asc " BYTES FREE^@"
 pagetxt   .asc "^M^J<TASTE>^@"
 
-          .)
+	  .)	; showloop
+
+          .) 	; DIRECTORY
 
           .(
 ekz       =sysmem

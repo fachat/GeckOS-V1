@@ -1,33 +1,82 @@
+/****************************************************************************
+   
+    OS/A65 Version 1.3.3
+    Multitasking Operating System for 6502 Computers
 
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+.(
+#ifdef ROM
+
+#ifndef BASICEXE
+#define	BASICEXE $80
+#endif
+#ifndef BASICDEV
+#define	BASICDEV 0
+#endif
+
+          .word endofbasic
+          .byt PK_PRG+BASICEXE
+          .byt 2
+          .byt BASICDEV, BASICDEV
+          .word BASIC
+#ifndef ROMTEST
+          .byt 8,8,9,9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt 8,$18,9,$19,$a,$1a,$b,$1b,$c,$1c,$d,$1d,$e,$1e,<-1
+#endif
+          .asc "basic",0
+
+#else	/* ROM */
 
 #include  "oa1str.def"
 #include  "oa1sj.a65"
 #include  "oa1fs.def"
 
-#ifdef NOPRG
-
-          .word $800
-          *=$800
-          jmp PRG
-
-#else
           ;.word $800
           *=$8000
           .word 0
           .byt PK_PRG
           .byt 16
           .word 0
-          .word PRG
+          .word BASIC
           .byt 8,0,9,0,$a,0,$b,0,<-1
 
-#endif
+          *=$8000
+
+#endif /* ROM */
 
 /*#define   SHOW*/
 
-RAMEND    =$4000
-RAMANF    =$800
+#ifndef BASICEND
+#define	BASICEND $4000
+#endif
+#ifndef BASICSTART
+#define	BASICSTART $800
+#endif
 
-          *=$8000
+RAMEND    =BASICEND
+RAMANF    =BASICSTART
+#print RAMANF
+#print RAMEND
+
 
 #define   E_OPEN         2
 #define   E_TOOMANYF     1
@@ -36,8 +85,12 @@ RAMANF    =$800
 #define   E_NOTOPEN      3
 #define   E_NOTFND       4
 
--syszp    =$90
+/*#ifndef NOMMU*/
+oldsyszp =syszp
+-syszp    =$90		/* watch out - may not work on every ROM */
+/*#endif*/
 
+#echo oabasic:
 #print    syszp
 
 status    =syszp
@@ -61,7 +114,7 @@ dx        =syszp+11
 #define   F_SLEN    4
 
 
-PRG       jsr inifiles
+BASIC     jsr inifiles
           jsr inidup
           jsr lffcc
           jmp le394
@@ -3505,4 +3558,10 @@ stx,x
 #endif
 
 #print    syszp
+-syszp    =oldsyszp		/* watch out - may not work on every ROM */
+#echo returned to
+#print 	  syszp
+
+endofbasic =*
+.)
 

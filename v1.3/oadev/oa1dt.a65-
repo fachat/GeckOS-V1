@@ -22,22 +22,6 @@
 ****************************************************************************/
 
 
-#ifndef C64
-#define   PIO       $e810
-#define   VIA1      $e840
-#define   vdcctrl   $e888
-#define   vdc       $e880
-#define   VIDPAGE   1
-#endif
-
-#define   maxzeil   #25
-
-#ifndef C64
-#define	KEY_START   24
-#else
-#define KEY_START   16
-#endif
-
           .(
 
           .(
@@ -53,8 +37,6 @@ devend1   .word     devend2
           jmp prg2
           .asc "video2",0
 
-#ifndef C64
-
 devend2   .word     devend3
           jmp prg3
           .asc "video3",0
@@ -65,15 +47,6 @@ devend3   .word     devend
 
 prg4      ldx #3
           .byt $2c
-
-#else 
-
-devend2   .word     devend
-          jmp prg3
-          .asc "video3",0
-
-#endif
-
 prg3      ldx #2
           bit freq
           bpl prg   ; 1 MHz dann ok
@@ -105,7 +78,7 @@ zei2      =syszp+2
           .(
           cmp #DC_RES
           bne p1
-;.byt 2
+
           sty freq
           jsr inivid
           ldy screen
@@ -139,22 +112,18 @@ p1ok      pla
           cmp #DC_IRQ
           bne p2x
           .(
-#ifndef NOSYSPORT
-#ifndef NOSINPORT
           bit SYSPORT
           bpl re         ; kein TIRQ dann Ende
           lda SYSPORT
           sta SYSPORT
-#endif
-#endif          
+          
           jsr bellirq
-
-#ifndef C64		/* no interruptable video device */          
+          
           lda syscnt
           bmi re
           lda SYSPORT
           and #1
-          beq x1x	; CPU irq line active
+          beq x1x
 
           dec syscnt
           cli
@@ -173,7 +142,6 @@ x3        jsr setscr
 xe        sei
           inc syscnt
           rts
-#endif /* C64 */
           
 x1x       lda screen
           sta xscreen
@@ -201,35 +169,22 @@ p1c       .)
           ldy xscreen
           cpy actscr
           bne p1b
-#ifdef C64
-	  jsr crsrirq
-#endif
           jsr irqkey
           stx shfl
           bcs p1b
-
-#ifndef C64          
+          
           cpy #$46       ; switchkey
-#else
-	  cmp #6	 ; switchkey (F1)
-#endif
-
           bne p1c1
+          
           dex
-          bpl p1c2       ; without shift or ctrl
-p1c1b     lda actscr     ; then switch screen
+          bpl p1c2       ; ohne shift oder ctrl
+p1c1b     lda actscr     ; dann switchscreen
           clc
           adc #1
-#ifndef C64
-          and #3	 ; 4 screens
+          and #3
           bit freq
           bpl p1c1a
           and #1
-#else
-	  cmp #3	 ; C64 has three screens
-	  bcc p1c1a
-	  lda #0
-#endif
 p1c1a     sta actscr
           tay
           lda status,y
@@ -242,7 +197,7 @@ p1c1a     sta actscr
 p1c2      dex
           bmi p1b        ; nur shift dann ende
           dex
-          bpl p1c3       ; Ctrl only, then rxoff
+          bpl p1c3       ; nur Ctrl dann rxoff
           jsr rxoff
           jmp p1b
 
@@ -253,8 +208,7 @@ p1c3      dex
           eor #DC_SW_MOD
           sta status,y
           jmp p1b
-         
-	  ; no switch key 
+          
 p1c1      tax
           ldy xscreen
           lda status,y
@@ -280,35 +234,19 @@ p1b       .)
 p1e       ldy xscreen
           cpy actscr
           bne p1ea
-          lda shfl       ;ctrl pressed, then stop actual screen output
+          lda shfl       ;ctrl gedrckt, dann aktueller Bildschirm stop
           and #2
           bne p1d
-/*
-#ifdef C64		 ; test if crsr should be cleared
-	  ldx getstr,y
-	  jsr GETC
-	  bcs p1f
-	  pha
-	  tya
-	  pha
-	  jsr crsrclr
-	  pla
-	  tay
-	  pla
-	  jmp gotchar
-#endif
-*/
-p1ea     
-	  ldx getstr,y
+p1ea      ldx getstr,y
           jsr GETC
           bcs p1f
-gotchar   jsr irqvid	; print char on screen
+          jsr irqvid
           jsr setlin
           ldy xscreen
           cpy actscr
           bne p1ea
           lda shfl
-          and #1         ; shift pressed, then slow
+          and #1         ; shift gedrckt, dann langsam
           beq p1ea
           ;bne p1d
 p1f       cmp #E_EOF
@@ -410,7 +348,6 @@ o5        cmp #DC_GS
 /**************************************************************************/
 
 inimem    .(
-#ifndef NOMMU
 #ifdef ROM
           ldx #$11
 l1m       stx zei2
@@ -453,8 +390,7 @@ next      pla
           cpx #$18
 #endif
           bcc l1m
-#endif /* ROM */
-#endif /* NOMMU */
+#endif
           clc
           rts
           .)
@@ -464,31 +400,26 @@ next      pla
           
           .(
           
+#define   VIA1      $e840
 
 pnt       =sysmem
 cnt       =sysmem+1
 -sysmem   +=2
 
-&inibell  
-#ifndef C64
-	  lda #%00100100
+&inibell  lda #%00100100
           sta VIA1+VIA_IER
           lda VIA1+VIA_ACR
           and #%11000011
           ora #%00010000
           sta VIA1+VIA_ACR
-#endif
-&trigbell 
-#ifndef C64
-	  lda #0
+
+&trigbell lda #0
           sta pnt
           sta cnt
           lda #15
           sta VIA1+VIA_SR
-#endif
-&bellirq  
-#ifndef C64
-	  lda cnt
+
+&bellirq  lda cnt
           bne endirq
           ldy pnt
           lda tcnt,y
@@ -507,15 +438,16 @@ endbell   lda #0
           
 tcnt      .byt 2,2,2,2,2,2,2,0
 tfrq      .byt 32,64,128,32,64,128,32
-
-#else
-	  rts
-#endif
           .)
            
 /**************************************************************************/
         
           .(  
+
+#define   vdcctrl   $e888
+#define   vdc       $e880
+#define   maxzeil   #25
+#define   VIDPAGE   1
 
 spalte    =sysmem
 zeile     =sysmem+1
@@ -536,7 +468,6 @@ vzei      =syszp
           lda screen
           bne ix
 
-#ifndef C64
           ldx #0
 i1        bit freq
           bpl onemhz
@@ -553,58 +484,10 @@ nex       stx vdc
           bit freq
           bpl i2
           lda #80
-
-#else /* C64 */
-/* 
- * For the C64 we put the video screen memory to $e000-$ec00, i.e.
- * we have three possible screens only. We need $ec00-$efff for the 
- * stdlib. We use the std charom at $d000 in the RAM under I/O that 
- * the VIC doesn't see. The boot loader has to copy the charom there. 
- * Then we have all the memory below the I/O relatively free.
- */
-
-	  lda #0
-	  sta C64VIC+VIC_IRR		; no interrupts
-	  sta C64VIC+VIC_SPRITE_EN	; sprites off
-	  lda #27
-	  sta C64VIC+VIC_CR1		; 25 lines
-	  lda #8
-	  sta C64VIC+VIC_CR2		; 40 cols
-;	  lda #(($10 & %001110000)>>3)+(($20 & %00111100)<<2)
-	  lda #%10000100
-	  sta C64VIC+VIC_BASE		; character and screen base
-
-	  lda C64CIA2+CIA_DDRA		; set upper two video address bits
-	  ora #3			; via CIA2, PRA Bit 0 and 1
-	  sta C64CIA2+CIA_DDRA		; set bits to output mode
-	  lda C64CIA2+CIA_PRA
-	  and #%11111100
-	  sta C64CIA2+CIA_PRA		; change to uppermost page ($c000-)
-
-	  lda #C64_TEXT_COL		; set the screen (text) color 
-	  ldy #0
-coloop	  sta $d800,y
-	  sta $d900,y
-	  sta $da00,y
-	  sta $db00,y
-	  iny
-	  bne coloop
-
-	  lda #C64_BGND_COL		; set the border and background color
-	  sta C64VIC+VIC_BGND_COL0
-	  lda #C64_BORDER_COL
-	  sta C64VIC+VIC_EXT_COL
-
-	  lda #40
-
-#endif /* C64 */
-
 i2        sta maxspal
 
-#ifndef C64
           lda #$0c
           sta vdcctrl
-#endif
           lda #1
           sta bufscr
 ix        
@@ -629,9 +512,7 @@ ix
 &lineout  .(
           cmp #TC_CR
           bne irqvid
-#ifdef C64
-	  jsr crsrclr
-#endif
+
           jsr setmmu
           ldy zeile
           cpy iz
@@ -669,11 +550,6 @@ lie4      lda #TC_CR
           .)
           
 &irqvid   .(
-#ifdef C64
-	  pha
-	  jsr crsrclr
-	  pla
-#endif
           jsr setmmu
           tay
           bmi x1
@@ -835,17 +711,13 @@ s2        lda vtab,x
           sta vzei
           lda vtab+1,x
           sta vzei+1
-&setmmu   
-#ifndef NOMMU
-	  ldy #$10
+&setmmu   ldy #$10
           sty MMU+VIDPAGE
-#endif
           rts
           .)
 
 &setact   .(
           sta actscr
-#ifndef C64
           asl
           asl
           bit freq
@@ -855,18 +727,9 @@ s1        and #%00001111
           ldx #12
           stx vdc
           sta vdc+1
-#else
-	  asl 
-	  asl
-	  asl
-	  asl
-	  ora #%10000100
-	  sta C64VIC+VIC_BASE
-#endif
           rts
           .)
 
-#ifndef C64
 &setcrsr  .(
           ldx #15
           lda spalte
@@ -880,64 +743,8 @@ s1        and #%00001111
           stx vdc
           and #%00001111
           sta vdc+1
-	  rts
-	  .)
-#else
-
-	  .(
-crsrfl	=sysmem
-crsrcnt	=sysmem+1
--sysmem +=2
-
-&&setcrsr			; enable cursor
-	  bit crsrfl
-	  bmi ret		; already enabled
-	  lda #0		; inverse cursor next crsrirq
-	  sta crsrcnt
-	  lda #128		; enabled, but not invers
-	  sta crsrfl
-ret       rts
-
-&&crsrclr			; disable cursor
-	  bit crsrfl
-	  bpl ret		; not enabled
-	  lda actscr
-	  cmp xscreen
-	  bne ret		; not on visible screen - ignore
-
-	  bit crsrfl
-	  bvc clr		; not inversed
-;	  ldx zeile
-;	  jsr setzei
-	  ldy spalte
-	  lda (vzei),y
-	  eor #$80
-	  sta (vzei),y
-clr	  lda #0
-	  sta crsrfl
-	  rts
-
-&&crsrirq			; blink cursor
-	  bit crsrfl
-	  bpl ret		; not enabled
-	  dec crsrcnt
-	  bpl ret		; not this time
-	  lda #10
-	  sta crsrcnt
-;	  ldx zeile
-;	  jsr setzei
-php:sei
-	  ldy spalte
-	  lda (vzei),y
-	  eor #$80
-	  sta (vzei),y
-	  lda crsrfl
-	  eor #$40
-	  sta crsrfl
-plp
-	  rts
+          rts
           .)
-#endif
                     
 xout      .(
           cmp #TC_CR
@@ -1127,17 +934,17 @@ towcl     .(
           jmp clrli
           .)
           .)
-
-#ifndef C64                    
+                    
 vdc8tab   .byt $7e,$50,$64,6,$29,0,$19,$21,0,7,$60,7,0,0,0,0
 
 vdc4tab   .byt $3f,$28,$32,3,$29,0,$19,$21,0,7,$60,7,0,0,0,0
-#endif          
+          
           .)
           
 /**************************************************************************/
 
           .(
+#define   PIO       $e810
 
 cnt       =zei2
 rcnt      =sysmem
@@ -1148,7 +955,6 @@ tzei      =syszp
 -syszp    +=2
 
 &inikbd   .(
-#ifndef C64
           lda PIO+PIA_CRA
           and #255-4
           sta PIO+PIA_CRA
@@ -1163,29 +969,20 @@ tzei      =syszp
           stx PIO+PIA_PB
           ora #4
           sta PIO+PIA_CRB 
-	  lda #4
-#else /* C64 */
-	  lda #0
-	  sta C64CIA1+CIA_DDRB
-	  lda #$ff
-	  sta C64CIA1+CIA_DDRA
-	  sta C64CIA1+CIA_PRA
+
           lda #4
-#endif /* C64 */
           sta rcnt
           sta rspd
           rts
           .)
-
-#ifndef C64
 
 &irqkey   .(
           lda PIO
           and #$f0
           ora #8
           sta PIO
-ix1       
-	  lda PIO+2
+
+ix1       lda PIO+2
           cmp PIO+2
           bne ix1   
           ldy #0
@@ -1202,7 +999,6 @@ x0        lda PIO+2
           iny
           iny
 nctrl     sty shiftfl
-
           tya
           asl
           tax
@@ -1238,11 +1034,7 @@ lc        iny
 
           ldy #<-1
           sty prev
-nokey     
-/* TODO: check keyboard code - C64 works different */
-;	  ldx #KEY_START
-;	  stx rcnt
-	  ldx shiftfl
+nokey     ldx shiftfl
           sec
           rts
 
@@ -1258,7 +1050,7 @@ le        tax
           ldx rspd
           .byt $2c
 
-lx        ldx #KEY_START
+lx        ldx #24
           stx rcnt
 
           ldx shiftfl
@@ -1291,124 +1083,6 @@ sctab     .asc "^@^@|(&%#!^H^@^@)\'$":.byt $22
           .asc "64^@^L^J^G^D^A*5^@:^K^H^F^S"
           .asc "31^m;^M^B^C^Z+2^@?,^N^V^X"
           .asc "-0^@>^@}@^@=.^@@< {^@"
-
-#else /* C64 */
-
-&irqkey	  .(
-	  lda #0
-	  sta shiftfl
-	  ldy #$ff
-	  sty cnt
-
-	  sta C64CIA1+CIA_PRA
-l0	  lda C64CIA1+CIA_PRB
-	  cmp C64CIA1+CIA_PRB
-	  bne l0
-	  cmp #$ff
-	  beq nokey
-
-	  lda #%11111110
-	  sta C64CIA1+CIA_PRA
-
-l1	  lda C64CIA1+CIA_PRB
-	  cmp C64CIA1+CIA_PRB
-	  bne l1
-	  ldy #8
-
-nextbit	  lsr 
-	  bcs nobit
-	  pha
-	  lda ktab,x
-	  cmp #5
-	  bcs realkey
-	  cmp #3
-	  beq realkey
-	  ora shiftfl
-	  sta shiftfl
-	  bpl l3
-realkey	  stx cnt
-l3	  pla
-nobit	  inx
-	  cpx #65
-	  bcs endkey
-	  dey
-	  bne nextbit		; test next bit
-	  sec
-	  rol C64CIA1+CIA_PRA
-	  bne l1		; always
-
-endkey	  lda cnt
-	  cmp #$ff
-	  beq nokey
-	  cmp prev
-          bne lx
-
-          dec rcnt
-          bne nkret
-          ldx rspd
-          .byt $2c
-
-lx        ldx #KEY_START
-          stx rcnt
-
-	  sta prev
-
-	  tay
-	  lda shiftfl
-	  and #3
-	  asl
-	  tax
-	  lda ttab,x
-	  sta tzei
-	  lda ttab+1,x
-	  sta tzei+1
-
-	  lda (tzei),y
-          ldx shiftfl
-          clc
-          rts
- 
-nokey     ldx #<-1
-	  stx prev
-	  ldx #KEY_START
-	  stx rcnt
-nkret	  ldx shiftfl
-	  sec
-	  rts
-	  .)
-
-ttab	  .word ktab, stab, ctab, sctab
-
-ktab	  .byt TC_BS, TC_CR, TC_CRGT, 0, 0, 0, 0, TC_CDWN
-	  .byt "3wa4zse", 1 /* shift */
-	  .byt "5rd6cftx7yg8bhuv"
-	  .byt "9ij0mkon+pl-.:@,"
-	  .byt "\*;", TC_HOME, 1 /* shift */, "=^^/"
-	  .byt "1_", 2 /* control */, "2 ", 6 /* C= */, "Q", 3 /* stop */
-
-stab	  .byt TC_INS, TC_LF, TC_CLFT, 0, 0, 0, 0, TC_CUP
-	  .byt "#WA$ZSE", 1 /* shift */
-	  .byt "%RD&CFTX'YG(BHUV"
-	  .byt ")IJ0MKON+PL->[@<"
-	  .byt "\*]", TC_CLR, 1 /* shift */, "=^^?"
-	  .byt "!", TC_ESC, 2 /* control */, 34," ", 6 /* C= */, "Q", 3 /*stop*/
-
-ctab	  .byt TC_DEL, TC_EOL, TC_WRU, 0, 0, 0, 0, TC_WLO
-	  .byt "3^w^a4^z^s^e", 1 /* shift */
-	  .byt "5^r^d6^c^f^t^x7^y^g8^b^h^u^v"
-	  .byt "9^i^j0^m^k^o^n+^p^l-.:@,"
-	  .byt "\*;", TC_WCLS, 1 /* shift */, "=^^/"
-	  .byt "1", TC_CLL, 2 /* control */, "2 ", 6 /* C= */, "Q", 3 /*stop*/
-
-sctab	  .byt TC_INS, TC_LF, TC_CLFT, 0, 0, 0, 0, TC_CUP
-	  .byt "3^W^A4^Z^S^E", 1 /* shift */
-	  .byt "5^R^D6^C^F^T^X7^Y^G8^B^H^U^V"
-	  .byt "9^I^J0^M^K^O^N+^P^L-.:@,"
-	  .byt "\*;", TC_CLR, 1 /* shift */, "=^^/"
-	  .byt "1_", 2 /* control */, "2 ", 6 /* C= */, "Q", 3 /* stop */
-
-#endif /* C64 */
-
           .)
 
 devend    .)

@@ -1,0 +1,432 @@
+<title> OS/A65 Kernel Interface Description </title><body>
+<body>
+<p><h1 align=center> OS/A65 Kernel Interface Description </h1></p>
+<p> <h2 align=center> (c) 1989-96 Andre Fachat </h2></p>
+<hr>
+<h3 align=center>OS/A65 Version 1.3.6g</h3>
+<pre>
+
+Most kernel routines return an error code in the accumlator (a), if the
+carry flag is reset upon return. Otherwise the ac might contain data.
+
+-------------------------------------------
+
+$f000  	RESET   System reset
+$f003	NMI	Non-maskable interrupt
+$f006	IRQ	Interrupt routine
+
+-------------------------------------------
+
+$f009	GETMEM	Get a free memory block. Returns block number in x.
+$f00c	FREMEM	release memory block, parameter: block number in x
+$f00f	GETBLK	Tries to allocate a specified memory block, block number in x
+$f012	ENMEM	registers usable memory block to memory subsystem,
+		parameter: block number in x.
+
+-------------------------------------------
+
+$f015	GETSTR	Get a free stream. increase read and write task counter,
+		returns stream number in x
+$f018	FRESTR	decreases read and write task counter, thus freeing the
+		stream, if both result in zero. parameter: stream number in x
+$f01b	PUTC	puts a byte on the stream. parameter: stream number in x,
+		data byte in a. returns errorcode in a
+$f01e	GETC	Get a byte from the stream. parameter: stream number in x,
+		returns data byte in a (with carry=0) or error code 
+		(carry=1)
+$f021	UNGETC	Gives byte from stream back. parameter: stream number in x,
+		data byte in a, returns error code in a
+$f024	STRCMD	executes a stream command. parameter: stream number in x,
+		stream command in a, returns error code in a.
+
+		possible stream commands are:
+
+		SC_GET		0	same as GETSTR
+		SC_REG_RD	1	increase read task counter by one
+		SC_REG_WR	2	increase write task counter by one
+		SC_CLR		3	empty the stream
+		SC_EOF		4	closing the stream from the sender 
+					side, i.e. decrease write task 
+					counter by one
+		SC_NUL		5	closing the stream from the receiver
+					side, i.e. decrease read task 
+					counter.
+		SC_FRE		6	same as FRESTR
+		SC_STAT		7	read stream status
+		SC_GANZ		8	returns number of bytes in stream in a
+		SC_RWANZ	9	returns the stream write pointer in
+					a and the stream read pointer in y
+
+		Possible stream status are:
+
+		E_NUL		Noone reading from stream
+				(i.e. read task counter is zero)
+		E_EOF		stream is empty and noone is writing anymore
+				(i.e. write task counter is zero)
+		E_SEMPTY	stream buffer is empty
+		E_SFULL		stream buffer is full
+		E_SLWM		number of bytes below Low Water Mark 
+				(1/4 buffer size)
+		E_SHWM		number of bytes above Hogh Water Mark
+				(3/4 buffer size)
+
+-------------------------------------------
+
+$f027	DEVCMD	executes device commands. parameter: device number in x,
+		device command in a, optional parameter in y.
+		returns error code in a.
+
+		possible stream commands are:
+
+		DC_IRQ		0	execute IRQ routine
+		DC_RES		1	initialize device
+		DC_GS		2	sets the stream (in y) the device 
+					reads from
+		DC_PS		3	sets the stream (in y) the device 
+					writes to
+		DC_RX_ON	4	switch on receive
+		DC_TX_ON	5	switch off receive
+		DC_RX_OFF	6	switch on send
+		DC_TX_OFF	7	switch off send
+	
+		DC_SPD		8	set speed (in y), device dependend
+		DC_HS		9	set handshake (in y), device dependend
+		DC_ST		10	get device status, device dependend
+		DC_EXIT		11	disable device, including IRQ sources
+
+		DC_GNAM		16	get the name of a device, parameter:
+					device number in x, returns 
+					name PCBUF ($0200)
+		DC_GNUM		17	get number of a device from name,
+					parameter: name in PCBUF, length
+					of name in x, returns device number 
+					in x
+		DC_REGDEV	18	register new device(s)
+
+		With the registration of the device the system has to know
+		what to do with it and where to put it in memory.
+		Therefore you have to put the following struct in PCBUF.
+		
+		REGDEV_MPOS	0	address (position in memory map, i.e.
+					upper 4 bits, 0-14) of device block 
+					when being executed
+		REGDEV_MBLK	1	memory block number of device block
+					where the code is in
+		REGDEV_ADR	2	two-byte start address of the 
+					following:
+
+		
+		REGDEV_ADR ->  	2 byte pointer to label1
+				JMP Start_of_1st_device
+				Name_of_device,0
+				...
+		label1		2 byte pointer to label2
+				JMP Start_of_2nd_device
+				Name_of_2nd_device,0
+				...
+		labeln		$ffff
+ 
+		
+		With this method it is possible to register several devices,
+		as long as they are in one memory block, with one call.
+		
+		The devices are started with DC_RESET. In y they get a
+		system feature byte. Currently only bit 7 is defined,
+		where $00 is 1 MHz system clock and $80 is 2 MHz system clock.
+
+-------------------------------------------
+
+$f02a	GETENV	get a free environment and reserve the memory. parameter:
+		wanted memory size in kByte in y, returns env number in x
+		The memory is allocated from address 0 on.
+$f02d	FREENV	frees environment. parameter: env number in x
+$f030	SETBLK	carry=1: changes in a specified env. the mapping for a 
+		memory block. parameter: env number in x, position in 
+		memory map (0-14) in y, new memory block in a,
+		returns old memory block on this position in a
+$f033	FORK	start a new task. parameter: length of the following
+		struct in PCBUF in y
+
+		FORK_ENV	0	env to start task in
+					the env number is identical to the
+					task id
+		FORK_STDIN	1	stdin stream
+		FORK_STDOUT	2	stdout stream
+		FORK_STDERR	3	stderr stream
+		FORK_ADR	4	start address of task
+		FORK_NAME	6	name of task, ended by a nullbyte.
+					then command line that started
+					the program.
+
+		The commandline is put into the PCBUF of the starting 
+		task. The new task gets its own task id in x
+		The stream read/write task counter are incremented 
+		appropriately, i.e. for the out streams the write counter
+		and for STDIN the read counter.
+$f036	TERM	ends to own task. parameter: return code in a, which is given
+		to other tasks waiting on it
+$f039	KILL	ends another task. parameter: return code in a, task id in x
+$f03c	SUSPEND	just give control back to the scheduler, as there is nothing
+		to do at the moment - but keep running (not needed for
+		preemtive multitasking, an interrupt interrupts any task!)
+$f03f	WTERM	wait for a certain task to end. parameter: task id in x,
+		returns error code.
+$f042	GETINFO	get in info block of the running processes into PCBUF.
+		16 tasks (ANZ_ENV) a available at maximum and each task 
+		structure is 16 byte long
+
+		TN_ST		0	task status
+		TN_MEM		1	used memory in kByte
+		TN_SP		2	stack pointer
+		TN_IRQ		3	task interrupt routine address 
+					(0=none)
+		TN_STDIN	5	stdin stream
+		TN_STDOUT	6	stdout stream
+		TN_STDERR	7	stderr stream
+		TN_NAME		8	name of task (as given with fork)
+
+		The task status can have the values given below:
+
+		TS_FRE		0	env is free
+		TS_ENV		1	env in use, but no task
+		TS_IBRK		2	task executed BRK opcode in interrupt
+					routine
+		TS_BRK		3	task executed BRK opcode
+		TS_RDY		4	task is runnable (as after SUSPEND)
+		TS_IRQ		5	task is interrupted 
+		TS_WFRX		6	waiting for a receive from another 
+					task
+		TS_WFTX		7	waiting for a send from another task
+		TS_WFSEM	8	waiting on semaphore
+		TS_WFTERM	9	waiting on another task to end
+		TS_SIG		10	waiting on semaphore
+		TS_WXTX		11	waiting on send from a specified task
+
+$f045	DUP	(carry=1): set new STD* stream. parameter: STD* number in x,
+		new stream in a, returns old stream in a
+		read/write task counters are not touched!
+		(carry=0): get redirected STD* stream number. parameter:
+		STD* number in x, returns stream in a
+$f048	SETIRQ	set task interrupt routine address. parameter: in PCBUF:
+		
+		SETIRQ_ENV	0	env number
+		SETIRQ_ADR	1	irq routine address
+
+		an address of zero disables task interrupt routine. returns
+		E_CONFIG if disabled at compile time.
+$f04b	TRESET	sets the program counter of another task to a new address.
+		parameter: in PCBUF:
+
+		RESET_ENV	0	task id
+		RESET_ADR	1	new address
+
+-------------------------------------------
+
+$f04e	GETSEM	gets a free semaphore. returns semaphore number in x
+$f051	FRESEM	frees a semaphore. parameter: semaphore number in x
+		negative (system) semaphores cannot be freed (nor are they 
+		returned by GETSEM)
+$f054	PSEM	'PSEM' operation on a given semaphore. task waits till
+		semaphore is freed. parameter: semaphore number in x
+		carry=0: block till semaphore is free
+		carry=1: do a test&set operation and return with 
+		E_OK if semaphore gotten, or E_SEMSET if semaphore is in use.
+$f057	VSEM	'VSEM' operation on semaphore, allows other tasks
+		to grab the semaphore.
+		parameter: semaphore number in x
+
+-------------------------------------------
+
+$f05a	SEND	send a message to another task
+		parameter: optional message type in a, target task in x,
+		length of data in PCBUF in y; y=0 means 256 byte in PCBUF
+		The data is in PCBUF ($0200). returns a and y as given and 
+		the 'redirected' target (e.g. from filesystem manager) in x
+$f05d	RECEIVE	receives a message.
+		(carry=1): waits for any message
+		(carry=0): returns immediately, with an error if no message
+		received. Otherwise if a message is received, 
+		return sender task id in x, length of
+		data in PCBUF in y (0 means 256) and the optional message
+		type as given with SEND in a.
+
+$f060	WRITE	write a byte into another environment. 
+		parameter: target env in y, pointer to a zeropage location
+		in own task, where the target address is located, in x,
+		byte to write in a. returns old content in a
+$f063	READ	read data from another environment. parameter as above 
+		(without a of course). returns data byte in a.
+
+$f066	TDUP	register a task for a (negative) system task number.
+		parameter: (negative) task number to replace in x,
+		new task number to be used instead in a
+
+$f069	SIGNAL	(carry=0) wait for a signal from another task. parameter:
+		awaited signal number in a, returns signal sender task id in a
+		(carry=1) send signal to all tasks listening at the moment. 
+		parameter: signal number in a.
+
+$f06c	XRECEIVE receives a message from a specified task only. parameter as
+		with RECEIVE, plus sender task id in x
+
+$f06f	SETNMI	in systems without MMU, set the system NMI routine address.
+		(carry=1): set the new NMI routine address (in a/y)
+		(carry=0): clear NMI routine.
+		The NMI routine has to be left with RTS opcode!
+
+
+-------------------------------------------
+
+
+On bootup the system is tested and possible errors are detected.
+On systems with a system port, the hardware error is shown by the number
+of flashes the LED makes before the system reboots
+
+/*        Hardware-Errors          */
+
+#define   HE_ZP     &lt;-1		/* zeropage mem test */
+#define   HE_RAM    &lt;-2		/* RAM test  (to few RAM) */
+#define   HE_IMEM   &lt;-3		/* init memory */
+#define   HE_IDEV   &lt;-4		/* init device code */
+#define   HE_ISTR   &lt;-5		/* init stream code */
+#define   HE_IENV   &lt;-6		/* init environment code */
+#define   HE_ROM    &lt;-7		/* Couldn't start a program */
+#define   HE_DEV    &lt;-8		/* device returns error upon init */
+#define   HE_TASK   &lt;-9		/* all programs have terminated - reboot */
+
+
+possible error codes are (from oadef/oa1str.def, where most things,
+except filesystem stuff are defined):
+
+/*        Software-Errors          */
+
+#define   E_OK      0
+#define   E_NOTIMP  &lt;-1
+#define   E_CONFIG  &lt;-2
+#define   E_ILLPAR  &lt;-3
+#define   E_NOMEM   &lt;-4
+
+#define   E_NOSTR   &lt;-5
+#define   E_SFULL   &lt;-6
+#define   E_SEMPTY  &lt;-7
+#define   E_SLWM    &lt;-8
+#define   E_SHWM    &lt;-9
+#define   E_EOF     &lt;-10
+#define   E_NUL     &lt;-11
+
+#define   E_NODEV   &lt;-12
+#define   E_DON     &lt;-13
+#define   E_DOFF    &lt;-14
+#define   E_NOTX    &lt;-15
+#define   E_NOENV   &lt;-16
+#define   E_NOSEM   &lt;-17
+#define   E_SEMSET  &lt;-18
+
+#define   E_FNODRV  &lt;-19
+#define   E_FNOPATH &lt;-20
+#define   E_FNONAM  &lt;-21
+#define   E_FNOFIL  &lt;-22
+#define   E_FWPROT  &lt;-23
+
+#define   E_CMD     &lt;-65
+#define   E_Q       &lt;-66
+#define   E_GT      &lt;-67
+#define   E_RD      &lt;-68
+#define   E_WR      &lt;-69
+#define   E_V       &lt;-70
+#define   E_FT      &lt;-71
+
+#define   E_NOCLUS  &lt;-72      /* kein Cluster mehr frei               */
+#define   E_INVDATA &lt;-73      /* inkonsistente Daten auf der Diskette */
+#define   E_ILLCLUS &lt;-74      /* Cluster =1 oder >F_CLUS              */
+#define   E_VALBUF  &lt;-75      /* versucht gÅltigen Sektor mit XW zu schreiben   */
+#define   E_FILEXIST &lt;-76     /* Datei gibt es schon                  */
+#define   E_DISKFULL &lt;-77     /* Diskette voll                        */
+#define   E_DNEMPTY &lt;-78      /* bei rmdir Subdir nicht leer          */
+#define   E_NOFILE  &lt;-79      /* keine File-Struktur frei             */
+#define   E_ILLNAM  &lt;-80      /* Name mit Sonderzeichen *,?,"         */
+#define   E_FOPEN   &lt;-81      /* file fÅr Zugriff locked (file opened)*/
+
+
+Terminal devices should understand the following terminal control codes
+(But the used device driver doesn't understand them all, though...)
+
+/*        Terminal Commands        */
+
+#define   TC_BEL    7		bell	
+#define   TC_BS     8		backspace
+#define   TC_HT     9		horizontal tabulator
+#define   TC_LF     10		line feed
+#define   TC_VT     11		vertical tabulator
+#define   TC_FF     12		form feed
+#define   TC_CR     13		carriage return
+#define   TC_ESC    27		Escape code
+
+#define   TC_CLFT   $80		cursor left
+#define   TC_CRGT   $81		cursor right
+#define   TC_CUP    $82		cursor up
+#define   TC_CDWN   $83		cursor down
+#define   TC_HOME   $84		cursor to the upper left edge
+#define   TC_CLR    $85		clear screen
+#define   TC_DEL    $86		delete char
+#define   TC_INS    $87		insert
+#define   TC_WLO    $88    	set upper left window corner by cursor pos
+#define   TC_WRU    $89  	set lower right window corner by cursor pos
+#define   TC_WCLS   $8a		clear window
+#define   TC_EOL    $8b		put cursor to the end of line
+#define   TC_CLL    $8c		clear rest of line from cursor
+
+
+FORK, SETIRQ and TRESET can also be called via a SEND system call, when 
+the receiver address is SEND_SYS and the message type is SP_* 
+As with SEND/RECEIVE, all data is put into PCBUF.
+
+/*        SysProcCalls             */
+
+#define   SEND_SYS       $ff
+
+#define   PCBUF     $200
+
+#define   SP_FORK        0
+#define   SP_SETIRQ      1
+#define   SP_RESET       2
+
+#define   FORK_ENV       0
+#define   FORK_STDIN     1
+#define   FORK_STDOUT    2
+#define   FORK_STDERR    3
+#define   FORK_ADR       4
+#define   FORK_NAME      6    /* Ende bei Nullbyte     */
+
+#define   SETIRQ_ENV     0
+#define   SETIRQ_ADR     1
+#define   SETIRQ_SLEN    3
+
+#define   RESET_ENV      0
+#define   RESET_ADR      1
+#define   RESET_SLEN     3
+
+
+STD* stream number are replaced by the numbers saved in the environment 
+struct.
+
+/*        StdStream                */
+
+#define   STDNUL         $fc       /* wird ignoriert (z.b. fÅr FS)    */
+#define   STDIN          $fd
+#define   STDOUT         $fe
+#define   STDERR         $ff
+
+
+Reserved system environment numbers:
+
+#define   SEND_FM        $fe		/* filesystem manager */
+
+#define	  SEND_ERROR	 $fd		/* critical error handler */
+
+#define   SEND_TIME      $fc		/* set/get actual time */
+
+
+
+</pre>
+</body>
