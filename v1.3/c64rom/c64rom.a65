@@ -49,12 +49,15 @@
 				   needs to be done in device then, as
 				   kernel enables timer irq!! (reading 
 				   it causes all flags to be reset!) */
-#undef PARALLEL			/* for IEEE488 interface from Commodore 
+#define PARALLEL		/* for IEEE488 interface from Commodore 
 				   disables serial bus interface! */
 
 #define	C64_BGND_COL 	0
 #define	C64_TEXT_COL 	13
 #define	C64_BORDER_COL 	13
+
+#define	C64SWITCH	4	/* terminal switch key number (61= C=,
+				   4= F1) */
 
 /***************************************************************************/
 /* 			Better not change anything below                   */

@@ -233,7 +233,7 @@ p1c       .)
 #ifndef C64          
           cpy #$46       ; switchkey
 #else
-	  cmp #6	 ; switchkey (F1)
+	  cpy #C64SWITCH ; switchkey (F1) Watch out ktab,y must be > 5
 #endif
 
           bne p1c1
@@ -1409,7 +1409,7 @@ nkret	  ldx shiftfl
 
 ttab	  .word ktab, stab, ctab, sctab
 
-ktab	  .byt TC_BS, TC_CR, TC_CRGT, 0, 0, 0, 0, TC_CDWN
+ktab	  .byt TC_BS, TC_CR, TC_CRGT, 0, 6 /* F1 */, 0, 0, TC_CDWN
 	  .byt "3wa4zse", 1 /* shift */
 	  .byt "5rd6cftx7yg8bhuv"
 	  .byt "9ij0mkon+pl-.:@,"
