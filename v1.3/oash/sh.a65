@@ -763,6 +763,20 @@ inst      =sysmem+1
           rts
           .)
 
+#ifndef OLDROM
+&&setin    .(
+          jsr CHRGOT
+          cmp #"<"
+          beq s1
+s2        rts
+s1        inc LZEI
+          jsr ropenfile
+          bcs s2
+          txa  
+	  ; jmp opstdin
+          .)
+#endif
+
 &opstdin  .(        /* a=neuer StdIn-Stream  */
           ldx insp
           cpx #INDEPTH

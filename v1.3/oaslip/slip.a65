@@ -37,19 +37,55 @@
 
 #ifndef ROM
 
+#define	C64
+
+#ifdef C64
+#define	STDIOADDR $f000
+#endif
+
+#include "oa1sj.a65"
+#include "oa1str.def"
+#include "oa1fs.def"
+#include "stdio.a65"
+
+#define	DB(A)	.(:jmp ll0:ll1 .byt A,0:ll0 lda #<ll1:ldy #>ll1:jsr Txtout:.):
+
 #define	MAXSLOT	8
 #define	IPBUFFER 12*256		/* must be within one (4k) page! */
 #define	MTU	1024
 
-#define	NOPRG
+/*#define	NOPRG*/
 
-PRGSTART  =$1000
+PRGSTART  =$2000
 
 #ifndef SLIPDEV
 #define	SLIPDEV	0
 #endif
 
 #endif
+
+/**********************************************************************/
+/*	SLIP constants						      */
+
+#define	SL_END		192
+#define	SL_ESC		219
+#define	SL_ESC_END	220	
+#define	SL_ESC_ESC	221	
+
+/**********************************************************************/
+/*	Internet structs					      */
+
+#define	IPH_VER		0
+#define	IPH_SERVICE	1
+#define	IPH_LEN		2
+#define	IPH_ID		4
+#define	IPH_FL		6
+#define	IPH_TTL		8
+#define	IPH_PROT	9
+#define	IPH_CSUM	10
+#define	IPH_SRC		12
+#define	IPH_TRG		16
+
 
           .(
 #ifdef ROM
@@ -70,10 +106,6 @@ PRGSTART  =$1000
 #else /* ROM */
 
 /*------------------------------------------------------------------------*/
-
-#include  "oa1str.def"
-#include  "oa1sj.a65"
-#include  "oa1fs.def"
 
 #ifndef NOPRG
           ;.word $800
@@ -111,63 +143,281 @@ sysblk    =$2000
 
 PRG	.(
 
-bslot	=sysmem
-len	=sysmem+1
--sysmem	+=3
-p	=syszp
-endp	=syszp+2
+	jsr binit
+	bcs exit
+DB("^m^jbinit ok^m^j")
+	jsr startin
+DB("startin ok^m^j")
+	bcc doloop
+exit	rts
+
+doloop
+	jsr loopin
+	jsr SUSPEND
+	jmp doloop
+
+	.(
+
+islot	=sysmem
+ist	=sysmem+1	; 0=send data, $80= escaped
+ilen	=sysmem+2
+-sysmem	+=4
+ip	=syszp
+iend	=syszp+2
 -syszp	+=4
 
-	jsr binit
-	bcc start
-	rts
-start
+&startin
 	lda #<MTU
 	ldy #>MTU
 	jsr balloc
 	bcs oops
 
-	stx bslot
-	sta p
-	sty p+1
+	stx islot
+iresp	sta ip			/* reset packet */
+	sty ip+1
 	clc
 	adc #<MTU
-	sta endp
+	sta iend
 	tya
 	adc #>MTU
-	sta endp+1
-loop
-	jsr SUSPEND
+	sta iend+1
 
-	lda endp
-	sec
-	sbc p
-	sta len
-	lda endp+1
-	sbc p+1
-	sta len+1
-	bne get
-	lda len
-	beq full
-get
-	ldx #STDIN
-	ldy #p
-	lda len+1
-	bne l1
-	lda len
-	.byt $2c
-l1	lda #255
-	jsr GETB
-	bcs nextloop
-
-	/* now we have to check for a slip END mark and split the buffer
-	   accordingly */
-
-nextloop
-	jmp loop
-
-full	/* discard buffer or reallocate? */
+	lda #0
+	sta ist
+	clc
 oops	rts
+
+&loopin	.(
+	ldx #STDIN
+	jsr GETC
+	bcc gotbyt
+	rts
+gotbyt
+	cmp #SL_END
+	beq gotpacket
+	cmp #SL_ESC
+	bne noesc
+	sta ist
+	beq loopin
+noesc
+	bit ist
+	bpl noescape
+	cmp #SL_ESC_ESC
+	beq isesc
+	cmp #SL_ESC_END
+	bne noescape
+	lda #SL_END
+	.byt $2c
+isesc	lda #SL_ESC
+noescape
+	ldy #0
+	sty ist
+	sta (ip),y
+	inc ip
+	bne l1
+	inc ip+1
+l1
+	lda ip+1
+	cmp iend+1
+	bcc loopin
+	bne discard
+	lda ip
+	cmp iend
+	bcc loopin
+discard
+	ldx islot
+	jsr getbadr
+	jmp iresp	; no inloop, because if only SL_ENDs are sent, this
+			; would become an almost infinite loop
+
+gotpacket
+	ldx islot
+	lda ip
+	sta iend
+	lda ip+1
+	sta iend+1
+	jsr getbadr
+	sta ip
+	sty ip+1
+	cmp iend
+	bne ok
+	cpy iend+1
+	beq discard	; zero length packet received
+ok
+	;lda iend
+	;ldy iend+1
+	;jsr btrunc	; truncate buffer to needed size
+
+	/* so what now? */
+	jsr printpacket
+
+DB("^m^jip=")
+lda ip+1:jsr Hexout:lda ip:jsr Hexout
+DB("^m^jiend=")
+lda iend+1:jsr Hexout:lda iend:jsr Hexout
+
+	/* sanity checks */
+	/* header length */
+	ldy #IPH_LEN	; length in hi/lo format in IP header
+	lda (ip),y
+	sta ilen+1
+	iny
+	lda (ip),y
+	sta ilen
+
+DB("^m^jiph->len=")
+lda ilen+1
+jsr Hexout
+lda ilen
+jsr Hexout
+
+	clc
+	lda ilen
+	adc ip
+	php
+	cmp iend
+	bne discp
+	plp
+	dey
+	lda ilen+1
+	adc ip+1
+	cmp iend+1
+	bne discardlen
+discp	bne discardlenp
+
+	/* header checksum */
+	ldx islot
+	jsr checksum
+
+pha
+txa
+pha
+DB("^m^jHeader Checksum=")
+pla
+tay
+jsr Hexout
+pla
+pha
+jsr Hexout
+tya
+tax
+pla
+
+	cmp #<$fffd
+	bne discardcs
+	cpx #>$fffd
+	bne discardcs
+
+	/* TODO: check my IP address */
+
+	ldy #IPH_VER
+	and #$0f
+	asl
+	asl
+	tax			; length of IP header
+
+	ldy #IPH_PROT
+	lda (ip),y
+
+	cmp #1
+	beq icmp
+
+disc	jmp discard
+
+discardlenp
+	plp
+discardlen
+	DB("^m^jPacket discarded due to length mismatch^m^j")
+	jmp discard
+discardcs
+	DB("^m^jPacket discarded due to checksum^m^j")
+	jmp discard
+
+
+icmp	txa
+	tay			; first byte of icmp header
+	lda (ip),y		; icmp type
+	cmp #8			; echo message
+	bne disc
+				; modify message to echo reply message
+	lda #0			; icmp echo reply
+	sta (ip),y
+
+	rts
+
+	.)
+
+	/* computes IP header checksum and returns it in a/x */
+	/* TODO: make address + # of 16 bit words parameter */
+checksum .(
+
+tmp	=sysmem
+len	=sysmem+1
+-sysmem	+=2
+p	=syszp
+-syszp	+=2
+
+	jsr getbadr
+	sta p
+	sty p+1
+
+	ldy #IPH_VER
+	lda (p),y
+	and #$0f
+	asl
+	asl
+	sta len		; length in byte
+
+	ldx #0
+	txa
+	sta tmp
+	ldy #0
+loop	
+	iny
+	lda tmp
+	clc
+	adc (p),y
+	sta tmp
+	txa
+	dey
+	adc (p),y
+	tax
+
+	iny
+	iny
+	cpy len
+	bcc loop
+
+	lda tmp
+	rts
+	.)
+
+printpacket .(
+	lda #<initxt
+	ldy #>initxt
+	jsr Txtout
+	ldy #0
+l0
+	lda (ip),y
+	jsr Hexout
+	lda #" "
+	jsr Putc
+	iny
+	cpy iend
+	beq lend
+	tya
+	and #7
+	bne l0
+	jsr Crlfout
+	jmp l0
+lend
+	clc
+	rts
+
+initxt	.byt "^m^jReceived Packet:^m^j",0
+
+	.)
+
 	.)
 
 /**********************************************************************/
@@ -220,6 +470,7 @@ l0	sta slotladr,y
 	lda #>buf
 	sta flist+1
 
+	clc
 	rts
 	.)
 
@@ -272,7 +523,7 @@ next
 	ora p+1
 	bne l0
 	
-oops	
+oops	lda #E_NOMEM
 	sec
 	rts	
 
