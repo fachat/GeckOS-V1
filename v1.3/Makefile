@@ -1,9 +1,11 @@
 
 
+#XAPATH=~/src/xa-2.1.0/xa
+XAPATH=xa -x
 XAINPUT="..,../oadef,../oa1"
 XAOUTPUT=".."
 
-XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" xa
+XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH}
 
 all: rom ibmon mcopy c64 slip rmerr 
 

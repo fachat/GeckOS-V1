@@ -23,7 +23,7 @@
 
 
 #define   ROM
-/*#define   ROMTEST*/
+#define   ROMTEST
 
 #define	/*OLDROM*/	/* to be sure that we keep the source for the
 			   original 1.3.3 ROM (we cannot test it on real

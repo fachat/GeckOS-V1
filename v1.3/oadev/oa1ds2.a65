@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -42,7 +42,9 @@
           .(
 	  .word devend2
 	  jmp prg1
-	  .asc "ser2",0
+	  .asc "ser",sernr, 0
+
+-sernr += 1
 
 /*
  * status: Bit 	0 = 1= handshake enabled
@@ -82,8 +84,9 @@ prg1      ldx #0
           rts
 prgok     pla
           cmp #DC_IRQ
-          beq devirq
+          beq devirq2
           jmp others
+devirq2	  jmp devirq
 
 /*****************************************************************/
 
@@ -92,21 +95,41 @@ devini    lda #0
           sta instr,x
           sta outstr,x
 
+	ldy UART+UART_MCR
+	lda #$10
+	sta UART+UART_MCR
+	lda UART+UART_MSR
+	and #$f0
+	bne nodev
+	lda #$1f
+	sta UART+UART_MCR
+	lda UART+UART_MSR
+	and #$f0
+	cmp #$f0
+	bne nodev
+	sty UART+UART_MCR
+
+	ldy UART+UART_SCR
 	lda #%10101010
 	sta UART+UART_SCR
 	cmp UART+UART_SCR
-	bne devx
+	bne dev8250
 	lsr
 	sta UART+UART_SCR
 	cmp UART+UART_SCR
-	bne devx
+	bne dev8250
+	sty UART+UART_SCR
 
- 	lda #7				; no FIFO enable and clear FIFOs, 
-	sta UART+UART_FCR		; trigger at 1 byte
-	lda #0
-	sta UART+UART_IER		; polled mode (so far) 
-	sta UART+UART_MCR		; reset DTR, RTS
-	sta UART+UART_LCR
+	lda #1
+	sta UART+UART_FCR
+	lda UART+UART_IIR
+	ldy #0
+	sty UART+UART_FCR
+	asl
+	bcc dev16450
+	asl
+	bcc dev16550
+	; else dev16550A; currently only this one is supported
 
 	lda #%10000000
 	sta UART+UART_LCR
@@ -118,10 +141,20 @@ devini    lda #0
 	lda #%00000011			; 8N1
 	sta UART+UART_LCR
  
+ 	lda #7				; no FIFO enable and clear FIFOs, 
+	sta UART+UART_FCR		; trigger at 1 byte
+	lda #0
+	sta UART+UART_IER		; polled mode (so far) 
+	sta UART+UART_MCR		; reset DTR, RTS
+
           clc
           rts
 
-devx      lda status,x
+nodev					; no UART at all
+dev8250					; no Scratchpad, no FIFO
+dev16450				; scratchpad, no FIFO
+dev16550				; FIFO bug
+	  lda status,x
           ora #2
           sta status,x
           lda #E_NOTIMP
@@ -135,64 +168,86 @@ devirq
 	lda UART+UART_IIR
 	lsr
 	bcc intr
-
-	lda UART+UART_LSR
-	and #%00100000
-	beq notxpoll		; check if tx FIFO empty
-	jsr tx2
-notxpoll
-	jsr nobyt
-
-	; check receiver data available
-	lda UART+UART_LSR
-	and #1
-	beq irqend
-	jsr rx2
-	jmp notxpoll
-
 irqend  lda #E_NOIRQ		; no irq source found
-	rts			; not this one
+	;rts			; not this one
+	jmp irqe
 
 	;-----------------------------------------------
 
 intr
-	and #%00000111		; interrupt mask
-	cmp #2
-	beq rx
-	cmp #6
-	bne tx
-rx
-        bit status		; check if receiving
-        bmi rxok		; no -> tx
-	lda UART+UART_RXTX
+	and #%00000011		; interrupt mask - makes four possible IRQs
+	tay
+	bne int_tx
+	
+	lda UART+UART_MSR
 	jmp checkint
-rxok 	jsr rx2
-	jmp checkint
-tx       
-	cmp #1
-	bne checkint
+
+int_tx
+	dey
+	bne int_rx
+tx_loop
 	jsr tx2
+	jmp checkint
+
+int_rx
+	dey
+	bne int_status
+rx_loop
+	jsr rx2			; get one char
+	lda UART+UART_LSR
+	lsr
+	bcs rx_loop
+;	and #$20		; THRE ($40/2)
+;	bne tx_loop
+	jmp checkint
+
+int_status
+	lda UART+UART_LSR
 
 checkint
 	lda UART+UART_IIR
 	lsr
 	bcc intr		; irq still pending
 
+;	lda UART+UART_LSR
+;	and #$40
+;	beq nbyt
+;	jsr tx2
+;nbyt
+	jsr nobyt
+
 irqok   lda #E_OK		; irq source removed
+irqe	pha
+
+	lda UART+UART_LSR
+	and #$40
+	beq nbyt
+	jsr tx2
+	jsr nobyt
+nbyt
+	pla
 	rts
 
 	;-----------------------------------------------
 
 rx2	.(
 	lda UART+UART_RXTX
+	bit status
+	bpl rx2end
         ldx outstr
         jsr PUTC
-        bcs test
+        bcc rx2end
+	cmp #E_SLWM		; this happens most and is caught by nobyt
+	bne test
+rx2end	rts
 
 &nobyt  ldx outstr
+	bit status
+	bpl rx2end
         lda #SC_STAT
         jsr STRCMD
-test    bcc rx2end
+        bcc rx2end
+test
         cmp #E_NUL
         bne tstwater
         jmp rxoff
@@ -214,7 +269,6 @@ twl     cmp #E_SLWM
         bne rx2end
 wl      ldx #0  
 	jmp rtslo
-rx2end	rts
 	.)
 
 	;-----------------------------------------------
