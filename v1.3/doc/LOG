@@ -295,10 +295,12 @@ the irtx program to send commands to IR devices (like CD players or
 TV sets), a serial IEC filesystem. The shell runs over the serial 
 line (with 16550).
 
-******** OS/A 1.3.12d ******** 9mar1997 A.Fachat
+******** OS/A 1.3.12e ******** 9mar1997 A.Fachat
 
 The fstcp filesystem works for reading files and directories.
 Directories without directory mask, though. 
+The fstcp server accepts connections only from a given address now,
+and (hopefully) doesn't allow accesses outside the given directory.
 TODO: 32-bit modulo, autoconnect after broken connection, fstcp writes
 
 
