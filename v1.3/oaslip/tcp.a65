@@ -220,10 +220,13 @@ end2	lda (srv),y
 &&tcprx2 .(
 
 	jsr getpinfo
-
+	bcc piok
+	DB("getpi error in tcprx2^m^j")
+	rts
+piok
 	jsr ip2tcp
 
-#if 1 /*def DEBUGTCP*/
+#if 0 /*def DEBUGTCP*/
 DB("TCP check: pd=")
 lda pd+1: jsr EHexout: lda pd: jsr EHexout
 DB(", pdl=")
@@ -708,8 +711,11 @@ idat
 	pla
 	tax
 	pla
-	jsr getpinfo		; restores everything except dlen, discd, doffset
-
+	jsr getpinfo	; restores everything except dlen, discd, doffset
+	bcc piok
+	DB("getpi error in tcp_else^m^j")
+	rts
+piok
 	lda #1
 	ldx #0
 	jsr addrxnxt
@@ -851,7 +857,7 @@ lda #":":jsr ECout
 #endif
 	ldy #TCB_NTXBUF
 	lda (tcbp),y
-	beq noend2
+	bne noend2
 	clc
 	rts
 noend2
@@ -860,6 +866,10 @@ noend2
 	tax
 pha: DB("slot:"): pla: jsr EHexout: lda #":": jsr ECout
 	jsr getbadr
+	bcc adrok
+	DB("illegal slot# in ackxmit^m^j")
+	jmp freebuf
+adrok
 	sta p2
 	sty p2+1
 
@@ -910,7 +920,7 @@ l4	lda (tcbp),y
 	iny
 	cpy #TCB_SND_UNA+4
 	bcc l4
-
+freebuf
 	; got ack for first packet in queue
 	ldy #TCB_TXBUF
 	lda (tcbp),y
@@ -961,11 +971,11 @@ jsr ECrlfout
 	jsr tcpxip
 	jsr shortpk
 
-DB("from bangbuf: ")
+/*DB("from bangbuf: ")*/
 
 &mkpacket2
 
-#if 1
+#if 0
 DB("mkpacket: pp=")
 lda pp+1: jsr EHexout: lda pp: jsr EHexout
 DB(", pd=")
@@ -1115,6 +1125,11 @@ ok
 gotbuffer
 	stx myslot
 	jsr getbadr
+	bcc adrok
+	DB("illegal slot# in copy_n_queue^m^j")
+	sec
+	rts
+adrok
 	sta myp
 	sty myp+1
 
@@ -1189,6 +1204,9 @@ boom
 	ldx myslot
 	lda myhl
 	jsr getpinfo
+	bcc piok
+	DB("getpi error in copy_n_queue^m^j")
+piok
 /*
 DB("copy_n_queue returns ip=")
 lda ip+1: jsr EHexout: lda ip: jsr EHexout
@@ -1244,7 +1262,11 @@ iniretrans .(
 &tx_queue_packet .(
 	lda #TCP_OFFSET
 	jsr getpinfo
-
+	bcc piok
+	DB("getpi error in tx_queue_packet^m^j")
+	sec
+	rts
+piok
 	ldy #0
 	lda (pp),y
 	cmp #<TCP_DOFFSET
@@ -1413,6 +1435,10 @@ l1	lda (tcbp),y
 ok	;stx qslot
 	lda #TCP_OFFSET
 	jsr getpinfo
+	bcc piok
+	DB("getpi error in send_*^m^j")
+	rts
+piok
 /*
 	sta qp
 	sty qp+1

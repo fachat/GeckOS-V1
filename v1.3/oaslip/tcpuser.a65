@@ -55,8 +55,7 @@ chargen_srv
 	ldy #>chargen_srv
 	jsr tcp_listen
 
-	rts
-	;jmp fstcp_init
+	jmp fstcp_init
 	.)
 
 rx_queue_packet .(
@@ -126,7 +125,7 @@ ok	clc
 	lda (tcbp),y
 	beq c1a
 	ldy #TCB_FLAG
-	lda (tcbp),y
+	lda (tcbp),y	; queued fin !
 	ora #1
 	sta (tcbp),y
 	clc

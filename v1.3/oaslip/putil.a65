@@ -31,6 +31,8 @@ getpinfo .(
         sta phl
         stx pslot
         jsr getbadr
+	bcs err
+
         sta pp
         sty pp+1
         clc
@@ -48,7 +50,8 @@ getpinfo .(
         tya
         sbc #0
         sta pdl+1
-	rts
+	clc
+err	rts
 	.)
 
 /* moves src IP address to trg ddress in the IP header */

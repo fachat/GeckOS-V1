@@ -52,6 +52,10 @@ ende	rts
 newpacket
 	ldx oslot
 	jsr getbadr
+	bcc adrok
+	DB("error getting oslot adr^m^j")
+	jmp nextsl
+adrok
 	sta op
 	sty op+1
 	jsr getblen
@@ -101,11 +105,11 @@ esc2
 	lda #SL_END
 	ldx #STDOUT
 	jsr PUTC
-	bcs ende
+	bcs ende2
 			; free buffer slot
 	ldx oslot
 	jsr bfree
-
+nextsl
 	dec onslot
 	ldy #0
 l2	cpy onslot
@@ -158,7 +162,7 @@ wrongesc
 	txa
 	sta oslot,y
 	inc onslot
-
+#if 0
 px = syszp
 -syszp +=2
 DB("Sent packet:^m^j")
@@ -167,7 +171,7 @@ sta px:sty px+1
 jsr getblen
 ldx #px
 jsr printpacket2
-
+#endif
 	clc
 	rts
 drop

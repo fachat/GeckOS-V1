@@ -72,9 +72,10 @@ c2      lda phdr,y
         iny
         cpy #TPH_LEN
         bne c2
-
+#if 0
 lda ppl:ldy ppl+1:ldx #pp
 jsr printpacket2
+#endif
 	rts
 	.)
 

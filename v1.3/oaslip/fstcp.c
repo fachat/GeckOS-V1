@@ -87,6 +87,7 @@ void do_cmd(char *buf, int fd) {
 	switch(cmd) {
 	case FS_OPEN_RD:
 		fp = fopen(buf+FSP_DATA, "rb");
+printf("OPEN_RD(%s)=%p\n",buf+FSP_DATA,fp);
 		if(fp) {
 		  files[tfd].fp = fp;
 		  retbuf[FSP_DATA] = 0;

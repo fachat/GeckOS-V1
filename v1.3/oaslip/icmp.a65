@@ -37,7 +37,10 @@
 
 &icmp2	.(
 	jsr getpinfo
-	
+	bcc piok
+	DB("getpi error in icmp^m^j")
+	rts
+piok
 	lda pdl
 	ldy pdl+1
 	ldx #pd

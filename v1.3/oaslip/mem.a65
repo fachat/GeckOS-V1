@@ -113,8 +113,8 @@ gotslot
 	adc #0
 	sta slothlen,x
 
-jsr printlist
-#ifdef DEBUGMEM
+/*jsr printlist*/
+#if 0 /*def DEBUGMEM*/
 DB("^m^jalloc(")
 txa
 jsr EHexout
@@ -254,7 +254,7 @@ lda p+1:jsr EHexout:lda p:jsr EHexout:jsr ECrlfout
 	sta flist+1
 	clc
 geta
-#if 1 /*def DEBUGMEM*/
+#if 0 /*def DEBUGMEM*/
 php:txa:pha
 DB("^m^jallocated buffer ")
 txa: jsr EHexout
@@ -289,7 +289,7 @@ okfree	lda slotownr,x
 okf1
 /*	DB("bfree(")*/
 
-#ifdef DEBUGMEM
+#if 0 /*def DEBUGMEM*/
 DB("Freeing Slot ")
 txa:jsr EHexout
 lda #" ":jsr ECout
@@ -445,7 +445,7 @@ jsr printmem
 /* split buffer xr at size a/y for first part. return new buffer ID in x */
 &bsplit	.(
 	stx slot
-#ifdef DEBUGMEM
+#if 0 /*def DEBUGMEM*/
 pha
 tya
 pha
@@ -465,7 +465,7 @@ pla
 #endif
 	sta p3
 	sty p3+1
-pha:tya:pha:DB("bsplit "):jsr printlist:jsr ECrlfout:pla:tay:pla
+/*pha:tya:pha:DB("bsplit "):jsr printlist:jsr ECrlfout:pla:tay:pla*/
 
 	clc
 	adc #MINBUF-1
@@ -498,7 +498,7 @@ ok	lda p3
 	lda p3+1
 	sta slotrhln,x
 
-DB("slot="):lda slot:jsr EHexout:jsr ECrlfout
+/*DB("slot="):lda slot:jsr EHexout:jsr ECrlfout*/
 	jsr getbslot
 	bcs oops
 
@@ -525,6 +525,7 @@ DB("slot="):lda slot:jsr EHexout:jsr ECrlfout
 
 	inc slotownr,x	
 oknull	
+#if 0
 DB("^m^jsplit buffer @")
 	jsr printlist
 #ifdef DEBUGMEM
@@ -540,6 +541,7 @@ DB("^m^jsplit buffer @")
 	jsr EHexout 
 	jsr ECrlfout
 jsr printmem
+#endif
 #endif
 	clc
 	rts
@@ -612,9 +614,6 @@ l0
 	clc
 	lda slotownr,x
 	beq found
-;	lda slotladr,x
-;	ora slothadr,x
-;	beq found
 	inx
 	cpx #MAXSLOT
 	bcc l0
