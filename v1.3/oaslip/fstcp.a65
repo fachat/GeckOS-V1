@@ -51,7 +51,7 @@ fstcp_srv
         .word fstcp_queue-1, fstcp_loop-1, fstcp_signal-1
 
 &fstcp_init .(
-#ifndef MMU
+#ifdef NOMMU
 	ldx #SEM_SENDBUF
 	clc
 	jsr PSEM
@@ -64,7 +64,7 @@ fstcp_srv
 	lda #FM_REG
 	ldy #2
 	jsr SEND
-#ifndef MMU
+#ifdef NOMMU
 	php
 	ldx #SEM_SENDBUF
 	jsr VSEM
@@ -251,14 +251,23 @@ datok
 	ldy #0
 	lda (pd),y
 	jsr PUTC
-	bcc nextd
+	bcc nextd1
 	cmp #E_NUL
 	bne noclose
+
 DB("rxd E_NUL from stream^m^j")
+	ldx fd
+	lda fsrxb,x
+	tax
+	jsr bfree
 	jmp rdclose
+nextd1	jmp nextd
 noclose
 	cmp #E_SFULL
 	bne nextd
+DB("stream full, put back=")
+lda len+1:jsr EHexout:lda len:jsr EHexout:jsr ECrlfout
+
 	;  buffer full, so put length back to block
 	ldy #0
 	lda pd
@@ -276,6 +285,7 @@ noclose
 	lda len+1
 	sta (pp),y
 	jmp l0	
+
 nextd	inc pd
 	bne n0
 	inc pd+1
@@ -522,7 +532,7 @@ retnomem2 bcs retnomem
 	lda task
 	sta fstask,y
 
-#ifndef NOMMU
+#ifdef NOMMU
 	ldx #SEM_SENDBUF
 	jsr VSEM
 /*DB("free'd SEM_SENDBUF^m^j")*/
@@ -625,11 +635,12 @@ disc	ldx fsqueue
 	jsr bfree
 	jmp nextbuf
 noilllen
+/*
 DB("pkt type ")
 ldy #FSP_CMD:lda (pd),y:jsr EHexout
 DB(", fd="):lda fd:jsr EHexout
 DB(", st="):ldy fd:lda status,y:jsr EHexout:jsr ECrlfout
-
+*/
 	ldy #FSP_CMD
 	lda (pd),y
 	cmp #FS_REPLY
@@ -650,7 +661,7 @@ lda status,x:jsr EHexout:jsr ECrlfout
 	jmp disc
 noillreply
 
-#ifndef NOMMU
+#ifdef NOMMU
 	sec
 	ldx #SEM_SENDBUF
 	jsr PSEM

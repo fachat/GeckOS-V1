@@ -5,8 +5,8 @@
   instead of the task being set READY when the semaphore is freed 
 
 - the terminal device can leave an inverted space when pressing return
-
-- don't use "." as prefix for decimal values in monitor, but "#"
+  Some key combinations give strange values, and others (esp. w/ one of 
+  the shift keys) don't work - they then work with teh other shift key.
 
 - Backspace from serial line / vt100 doesn't work on serial line
 
@@ -18,4 +18,10 @@
   time
 
 - SLIP has to allow more than 256 bytes in a packet!
+
+- lots of more SLIP bugs.
+
+- The FSIBM filesystem seems to break after some accesses...
+  Also, when writing, it seems to lose characters. This must still be 
+  confirmed!
 

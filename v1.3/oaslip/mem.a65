@@ -35,7 +35,7 @@
 	.(
 
 &slotladr =sysmem
-slothadr =sysmem+MAXSLOT
+&slothadr =sysmem+MAXSLOT
 slotllen =sysmem+MAXSLOT*2
 slothlen =sysmem+MAXSLOT*3
 slotrlln =sysmem+MAXSLOT*4
@@ -283,7 +283,8 @@ pla:tax:plp
 	rts
 okfree	lda slotownr,x
 	bne okf1
-	DB("bfree: slot not in use, retadr=")
+	DB("bfree: slot ")
+	txa:jsr EHexout:DB(" not in use, retadr=")
 	txa:pha:tsx:lda $0103,x:jsr EHexout:lda $0102,x:jsr EHexout
 	jsr ECrlfout:pla:tax
 	sec
@@ -476,6 +477,10 @@ pla
 	bcc l0
 	iny
 l0 	sty p2+1
+
+	lda slotownr,x
+	beq splitownr
+
 	tya
 	cmp slothlen,x
 	bcc ok
@@ -491,9 +496,15 @@ l0 	sty p2+1
 	lda p3+1
 	sta slotrhln,x
 	sec
+	rts
+
 oops	DB("bsplit: oops^m^j")
 	sec
 	rts
+
+splitownr
+	DB("bsplit: no owner!^m^j")
+	jmp oops
 
 ok	lda p3
 	sta slotrlln,x

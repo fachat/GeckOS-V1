@@ -48,7 +48,15 @@
 #define FSTCP_SERVER_PORT 	8090
 #endif
 
-#define	NO_FSTCP		/* if defined, do not use fstcp */
+#ifndef WWW_DRV
+#define WWW_DRV			2
+#define	WWW_DEFAULT		"index.html"
+#define	WWW_PATH		0
+#endif
+
+/* One of these two _must_ be defined. They don't work together! */
+#undef	NO_FSTCP		/* if defined, do not use fstcp */
+#define	NO_WWW			/* if defined, do not use www server */
 
 #define	MAXOQUEUE	4
 #define	INBUF		64
@@ -135,7 +143,7 @@ PRGSTART  =$4000
 #ifndef NOMMU
 
 syszp     =$80
-sysmem    =$1800
+sysmem    =$1c00
 sysblk    =PRGSTART
 
 #endif

@@ -931,7 +931,7 @@ r1        lda #SYSPAGE
 
           .(
 +xreceive jsr memsys
-          bcc rx1a
+          ;bcc rx1a
           lda #TS_WXTX
           bne rx1b
           
@@ -939,10 +939,13 @@ r1        lda #SYSPAGE
           bcc rx1
           lda #TS_WFTX
 rx1b      ldy p0
+	  bcc rx1a
           sta Envtab+TE_ST,y
 rx2       jmp nexttask
 
-rx1a      sec
+rx1a      txa
+	  sta Env2tab+TE_PAR,y
+	  sec
 rx1       ldx Task
           jsr testtx
           bcc rx2

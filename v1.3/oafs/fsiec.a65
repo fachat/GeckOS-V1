@@ -1061,15 +1061,20 @@ sfn1      lda div
           lda #","
           sta PCBUF+FS_OPEN_NAME,y
           iny
-;          lda #"p"
-lda #"P"
+#ifndef OLDHACK
+          lda #"p"
+#else
+	  lda #"P"
+#endif
           sta PCBUF+FS_OPEN_NAME,y
           iny
 sfn3      lda #","
           sta PCBUF+FS_OPEN_NAME,y
           iny
           pla
-eor #$20
+#ifdef OLDHACK
+	  eor #$20
+#endif
           sta PCBUF+FS_OPEN_NAME,y
           iny
 	  ldx #<PCBUF+FS_OPEN_NAME
