@@ -96,11 +96,13 @@ i1        jsr setyenv
           cpx #ANZENV
           bcc i1
 #ifdef STACKCOPY
-	jsr inistack
-#endif
-
+	jsr inistack		; returns -1 in x
+	txa
+	inx
+#else
           lda #<-1
           ldx #0
+#endif
 i2        sta Xenv,x
           inx
           cpx #ANZXENV
@@ -242,8 +244,12 @@ msys      pla
           sta BLKSIZ+SR
           stx BLKSIZ+XR
           sty BLKSIZ+YR
+#ifdef CMOSCPU
+	  ply
+#else
           pla
           tay
+#endif
           pla
           tsx
           stx $1FF
@@ -252,8 +258,12 @@ msys      pla
           ldx $1FF
           txs
           pha
+#ifdef CMOSCPU
+	  phy
+#else
           tya
           pha
+#endif
           lda SR
           pha
           lda AC
@@ -891,7 +901,8 @@ f1        jsr memtask
           ldy #RESET_SLEN
 sends     jsr memsys
 
-syspc     pha
+syspc     
+	  pha
           tya
           tax
 #ifndef NOMMU
@@ -1123,8 +1134,12 @@ calcbuf = sysmem
 	sei		; an irq can switch contexts!
 
 	pha
+#ifdef CMOSCPU
+	phx
+#else
 	txa
 	pha
+#endif
 	lda #ST_LEN-3
         sta Envtab+TE_SP,y
 
@@ -1132,8 +1147,12 @@ calcbuf = sysmem
 	jsr setstack
 
 	ldy #ST_LEN-3
+#ifdef CMOSCPU
+	plx
+#else
 	pla
 	tax
+#endif
 #endif
           pla
           sec
@@ -1195,10 +1214,15 @@ ie0x      ldx Env2tab+TE_IRQ+1,y
           pha
           lda #<rtirq-1
           pha
+#ifdef CMOSCPU
+	  phx
+	  phy
+#else
           txa
           pha
           tya
           pha
+#endif
           rts          
 rtirq     jsr memsys     
           ldx Task
@@ -1367,8 +1391,12 @@ g1        stx cnt
           lda Env2tab+TE_STDERR,y
           sta xSYSBUF+TN_STDERR,x
 #ifndef NOMMU
+#ifdef CMOSCPU
+	  phy
+#else
           tya
           pha
+#endif
           stx xr
           ldx #0
           stx cnt2
@@ -1597,8 +1625,12 @@ d         =sysmem
           stx d
           tax
           jsr teststd
+#ifdef CMOSCPU
+	  phx
+#else
           txa
           pha
+#endif
           lda d
           clc
           adc #<-STDIN
@@ -1638,8 +1670,12 @@ duperr    plp
           pha
           jsr testenv    
           bcs noenv
+#ifdef CMOSCPU
+	  phy
+#else
           tya
           pha
+#endif
           jsr setyenv
           sty p1
           pla
@@ -1731,8 +1767,12 @@ bstack	=sysblk
 	bne copy
 	rts
 copy
+#ifdef CMOSCPU
+	phx
+#else
 	txa
 	pha
+#endif
 	lda p+1			; p already points to actual stack?
 	beq saved		; if zero than invalid
 
@@ -1781,7 +1821,7 @@ ende
 	stx p+1
 	dex
 	stx stask
-	rts
+	rts		; must return -1 in x!
 	.)       
 #endif   
           .) 

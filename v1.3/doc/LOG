@@ -230,4 +230,10 @@ Optimized UART 16550A driver. Now works for 9600 baud (if not much other
 work to do). Then we still loose characters. Running SLIP with 19200
 crashes the system :-(
 
+******** OS/A 1.3.9b ******** 20oct1996 A.Fachat
+
+I managed to get my selfbuilt hardware running again! So the current
+stdrom is checked with MMU. OLDROM will from the next version on
+refer to 1.3.9b
+
 
