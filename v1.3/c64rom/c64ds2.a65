@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.8
+    OS/A65 Version 1.3.9
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -31,8 +31,8 @@
  * interrupt latencies.
  */
 
-#ifdef C64UART
-#define	UART	C64UART
+#ifdef UARTBASE
+#define	UART	UARTBASE
 #else
 #define UART	$d600
 #endif
@@ -42,7 +42,7 @@
           .(
 	  .word devend2
 	  jmp prg1
-	  .asc "ser1",0
+	  .asc "ser2",0
 
 /*
  * status: Bit 	0 = 1= handshake enabled
@@ -141,6 +141,8 @@ devirq
 	beq notxpoll		; check if tx FIFO empty
 	jsr tx2
 notxpoll
+	jsr nobyt
+
 	; check receiver data available
 	lda UART+UART_LSR
 	and #1
@@ -187,10 +189,10 @@ rx2	.(
         jsr PUTC
         bcs test
 
-nobyt   ldx outstr
+&nobyt  ldx outstr
         lda #SC_STAT
         jsr STRCMD
-test    bcc devirq
+test    bcc rx2end
         cmp #E_NUL
         bne tstwater
         jmp rxoff
