@@ -4233,7 +4233,7 @@ atnin     jsr datalo
           rts
 */
 nodev     lda #$80
-inc $d020
+;inc $d020
 error     jsr seterror
           jsr atnhi
 endhndshk jsr waitus
