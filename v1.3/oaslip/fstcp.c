@@ -53,7 +53,7 @@
 
 typedef struct {
 	int	state;
-	int	fd;
+	FILE	*fp;
 } File;
 
 File files[MAXFILES];
@@ -67,20 +67,59 @@ void usage(void) {
 }
 
 void do_cmd(char *buf, int fd) {
-	int tfd, cmd;
-	char retbuf[4];
+	int tfd, cmd, len;
+	char retbuf[70];
+	FILE *fp;
+	int n;
 
 	cmd = buf[FSP_CMD];
 	tfd = buf[FSP_FD];
+	len = buf[FSP_LEN];
+	fp = files[tfd].fp;
 
 	printf("got cmd=%d, fd=%d, name=%s\n",cmd,tfd,buf+FSP_DATA);
 
 	retbuf[FSP_CMD] = FS_REPLY;
-	retbuf[FSP_DATA] = -22;
 	retbuf[FSP_LEN] = 4;
 	retbuf[FSP_FD] = tfd;
+	retbuf[FSP_DATA] = -22;
 
-	write(fd, retbuf,4);	
+	switch(cmd) {
+	case FS_OPEN_RD:
+		fp = fopen(buf+FSP_DATA, "rb");
+		if(fp) {
+		  files[tfd].fp = fp;
+		  retbuf[FSP_DATA] = 0;
+		}
+		break;
+	case FS_READ:
+		if(fp) {
+		  n = fread(retbuf+FSP_DATA, 1, 64, fp);
+		  retbuf[FSP_LEN] = n+FSP_DATA;
+		  if(n<64) {
+		    retbuf[FSP_CMD] = FS_EOF;
+		    fclose(fp);
+		    files[tfd].fp = NULL;
+		  } else {
+		    retbuf[FSP_CMD] = FS_WRITE;
+		  }
+		}
+		break;
+	case FS_WRITE:
+	case FS_EOF:
+		if(fp) {
+		  n = fwrite(buf+FSP_DATA, 1, len-FSP_DATA, fp);
+		  retbuf[FSP_DATA] = 0;
+		  if(cmd == FS_EOF) {
+		    fclose(fp);
+		    files[tfd].fp = NULL;
+		  }
+		}
+		break;
+	}
+
+
+	write(fd, retbuf, retbuf[FSP_LEN]);
 	printf("write %02x %02x %02x %02x\n", retbuf[0], retbuf[1],
 			retbuf[2], retbuf[3]);
 }
@@ -178,11 +217,14 @@ for(i=0;i<n;i++) printf("%02x ",buf[wrp+i]); printf("\n");
 		rdp = 0;
 	      }
 printf("wrp=%d, rdp=%d, FSP_LEN=%d\n",wrp,rdp,FSP_LEN);
-	      if(wrp-rdp > FSP_LEN) {
+	      while(wrp-rdp > FSP_LEN) {
 		plen = buf[rdp+FSP_LEN];
 printf("wrp-rdp=%d, plen=%d\n",wrp-rdp,plen);
-		if(wrp-rdp <= plen) {
+		if(wrp-rdp >= plen) {
 		  do_cmd(buf+rdp, fd);
+		  rdp +=plen;
+		} else {
+		  break;
 		}
 	      }
 	    }

@@ -1,5 +1,6 @@
+<html><head>
 <title> OS/A65 Multitasking OS for 6502 </title>
-<body>
+</head><body>
 <p><h1 align=center> OS/A65 Multitasking OS for 6502 </h1></p>
 <p> <h2 align=center> (c) 1989-96 Andre Fachat </h2></p>
 <hr>
@@ -309,13 +310,19 @@ is planned, but has not yet been implemented. Some filesystems (like
 fsiec for Commodore floppy drives) wouldn't even support it.
 </p><p>
 <h2><a name="stdlib">Standard Library</a></h2>
-The so called standard library is a set of subroutines that tasks may
+The so called <a href="stdlib.html">standard library</a> is a set of 
+subroutines that tasks may
 map into their memory or not. The library is below the 
 I/O area, at $e800. Directly below $e800 the jumptable for the
 library is located. All routines run in task space, and have no
 connection to the kernel, except for calling normal system calls. 
 </p><p>
 <h2><a name="filesystems">Available Filesystems</a></h2>
+All filesystem tasks use a common <a href="filesystems.html">Filesystem
+Interface</a> to communicate with other tasks. The SEND/RECEIVE
+calls are used to open files, while the Streams are used to transfer the
+data. The filesystem manager redirects the SENDs to the right
+filesystem tasks automatically.
 <h3><a name="fs-dev">Device Filesystem 'fsdev'</a></h3>
 The device filesystem provides an easy interface to devices, in allowing
 them to be used as files. A request to open the device, for example, 
@@ -359,26 +366,26 @@ with a disk monitor. The next revision should define a semaphore
 for this.
 </p><p>
 <h2><a name="software">Available Software</a></h2>
-<h3><a name="sw-sh">The Shell 'sh'</a></h3>
-The shell is a command line interpreter that provides an easy to use 
-interface to the system. A scripting language is not available, though.
-For external commands and some internal commands like DIR and more
-I/O redirection is possible. I.e. that the STD* streams can be redirected
-to a file or even piped to other programs.
+<h3><a name="sw-shell">The Shell 'sh'</a></h3>
+The <a href="shell.html">shell</a> is a command line interpreter that
+provides an easy to use interface to the system. A scripting language is
+not available, though.  For external commands and some internal commands
+like DIR and more I/O redirection is possible. I.e. that the STD*
+streams can be redirected to a file or even piped to other programs.
 </p><p>
 <h3><a name="sw-mon">The Monitor 'mon'</a></h3>
-'mon' is a full featured 6502 assembly and machine language monitor.
-Among the usual standard commands other features like, for example,
-relocating 6502 in a certain area or searching for opcodes with 
-specified addressing modes is possible.
+<a href="mon.html">'mon'</a> is a full featured 6502 assembly and
+machine language monitor.  Among the usual standard commands other
+features like, for example, relocating 6502 in a certain area or
+searching for opcodes with specified addressing modes is possible.
 </p><p>
 <h3><a name="sw-basic">BASIC interpreter</a></h3>
-The BASIC interpreter is an extended Commodore Basic V2 interpreter as
-found in the C64. In fact it is de-assembled from the C64 and patched
-to make it work on CS/A. In addition, some commands have been changed and 
-new commands have been added, amongst them the Commodore Basic V4 commands.
-In contrast to the C64 basic interpreter, it runs in multitasking and
-you can quit ;-)
+The <a href="basic.html">BASIC interpreter</a> is an extended Commodore
+Basic V2 interpreter as found in the C64. In fact it is de-assembled
+from the C64 and patched to make it work on CS/A. In addition, some
+commands have been changed and new commands have been added, amongst
+them the Commodore Basic V4 commands.  In contrast to the C64 basic
+interpreter, it runs in multitasking and you can quit ;-)
 </p><p>
 <h2><a name="hardware">Hardware</a></h2>
 <h3><a name="hw-cpu">CPU</a></h3>
@@ -551,7 +558,7 @@ Currently two ports have been done. One is a port to the CS/A65 without
 MMU, to use it in embedded applications I had in mind. The other one
 is the C64 port.
 </p> <p>
-<h3><a name="pr-nommu">NOMMU-Port</a></h3>
+<h3><a name="pt-nommu">NOMMU-Port</a></h3>
 The port to a system without MMU is one of the more difficult. 
 The problem is, that global variables cannot be mapped to different
 physical memory locations for different tasks. So this has to be
@@ -563,7 +570,7 @@ invocations and running different tasks on them would normally
 give a real mess. More on this issue can be found in
 <a href="nommu.html">nommu.html</a>.
 </p> <p>
-<h3><a name="pr-c64">C64-Port</a></h3>
+<h3><a name="pt-c64">C64-Port</a></h3>
 After porting it to a system without MMU, there was only a small step
 porting it to the C64. The first implementation used the Commodore
 parallel IEEE488 interface, as it's easier to program - and simulate
@@ -576,7 +583,7 @@ A program relocator, for example, would make it much easier in that
 the applications don't have to be assembled to a certain memory area.
 Instead they could be relocated to some free memory when being loaded.
 </p> <p>
-<h3><a name="pr-c128">What about a C128-Port?</a></h3>
+<h3><a name="pt-c128">What about a C128-Port?</a></h3>
 The C128, for example, would surely be a good candidate for a new
 version: It can map the zeropage and the stack anywhere in memory and
 can thus have different ones for each task. In addition to this, a
@@ -644,4 +651,4 @@ loader program into the new environment. This then reads the program
 from the stream and executes it.
 </ul>
 </body>
-
+</html>

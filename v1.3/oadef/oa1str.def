@@ -26,8 +26,12 @@
 
 /*        System-Defs              */
 
+#ifndef SYSPORT
 #define   SYSPORT   $efe0
+#endif
+#ifndef NOMMU
 #define   MMU       $eff0
+#endif
 #define   BLKSIZ    $1000
 #define	  BLKLOG    12		   /* number of addressbits valid in one BLKSIZ */ 
 #define   SYSPAGE   $0             /* $12 zum testen, wenn System nicht startet  */
@@ -62,15 +66,16 @@
 /**************************************************************************/
 /*        Hardware-Errors          */
 
-#define   HE_ZP     <-1
-#define   HE_RAM    <-2
-#define   HE_IMEM   <-3
-#define   HE_IDEV   <-4
-#define   HE_ISTR   <-5
-#define   HE_IENV   <-6
-#define   HE_ROM    <-7
-#define   HE_DEV    <-8
-#define   HE_TASK   <-9
+#define   HE_ZP     <-1		/* Zeropage RAM defective */
+#define   HE_RAM    <-2		/* not enough RAM (may be defective) */
+#define   HE_IMEM   <-3		/* memory handler init failed */
+#define   HE_IDEV   <-4		/* device handler init failed */
+#define   HE_ISTR   <-5		/* stream handler init failed */
+#define   HE_IENV   <-6		/* environment handler init failed */
+#define   HE_ROM    <-7		/* not enough Streams/Envs to handle all 
+				   ROM autostart requests */
+#define   HE_DEV    <-8		/* error registering ROM device */
+#define   HE_TASK   <-9		/* no more active task! */
 
 /*        Software-Errors          */
 
@@ -312,13 +317,19 @@
 /*********************** Hardware structs *******************************/
 /*        SysIO                    */
 
+#define   SYS_TIRQ  %10000000 /* bmi/bpl          */
 #define   SYS_KEY   %01000000
+#define   SYS_IOINH %00100000
 #define   SYS_EXTIO %00010000
 #define   SYS_LED   %00001000
-#define   SYS_IRQEN %00000010
 #define   SYS_RTS   %00000100
-#define   SYS_TIRQ  %10000000 /* bmi/bpl          */
+#define   SYS_IRQEN %00000010
 #define   SYS_IRQ   %00000001
+
+#ifndef LEDPORT
+#define	LEDPORT	SYSPORT
+#define	LED_LED SYS_LED
+#endif
 
 /*        Struct    PIA 6821       */
 

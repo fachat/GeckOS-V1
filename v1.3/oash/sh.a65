@@ -85,20 +85,28 @@
 #endif
 
 #ifndef NOSH
+#ifdef GECKO
+	  .word PRGEND
+#else
 #ifdef NOMON
           .word PRGEND
 #else
           .word prg1
 #endif /* NOMON */
+#endif /* GECKO */
           .byt  PK_PRG+SHEXE
           .byt  4
           .byt  SHDEV,SHDEV
           .word PRG
+#ifndef NOMMU
 #ifndef ROMTEST
           .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
 #else
           .byt $c,$1c,$d,$1d,$e,$1e,<-1
 #endif /* ROMTEST */
+#else 
+	  .byt <-1
+#endif /* NOMMU */
 
 #ifndef SH2
           .byt  "shell",0,"shell b c:auto.bat",0
@@ -111,7 +119,9 @@
 
 /*------------------------------------------------------------------------*/
 
+#ifndef GECKO
 #ifndef NOMON
+
 prg1      .word PRGEND
 
           .byt  PK_PRG+MONEXE
@@ -130,7 +140,9 @@ prg1      .word PRGEND
 #else
           .byt  "mon2",0,"mon2",0
 #endif /* MON2 */
+
 #endif /* NOMON */
+#endif /* GECKO */
 
 #else /* ROM */
 

@@ -1,6 +1,6 @@
-
-<title> OS/A65 Operation without MMU </title><body>
-<body>
+<html><head>
+<title> OS/A65 Operation without MMU </title>
+</head><body>
 <p><h1 align=center> OS/A65 Operation without MMU </h1></p>
 <p> <h2 align=center> (c) 1989-96 Andre Fachat </h2></p>
 <hr><p>
@@ -46,7 +46,7 @@ For systems without an MMU, the usage of the SEND buffer
 has to be coordinated between the tasks. Therefore 
 a system semaphore is used. 
 <pre>
-#define	SEM_SENDBUF	<-1
+#define	SEM_SENDBUF	&lt-1
 </pre><p>
 Before accessing the SEND buffer at $02**, the task has to allocate
 it with a PSEM operation on the SEM_SENDBUF semaphore.
@@ -84,3 +84,4 @@ Also the memory management is kind of bogus for a system without MMU.
 Suggested reading: "Operating Systems, design and implementation", Andrew S.
 Tanenbaum, Prentice-Hall
 </body>
+</html>

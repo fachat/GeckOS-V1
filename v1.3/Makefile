@@ -7,11 +7,15 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH} 
 
-all: rom ibmon mcopy c64 slip rmerr 
+all: gecko.rom rom ibmon mcopy c64 slip rmerr 
 
 .obj.a65:
 	(cd $%; ${XA} $%);
 	
+gecko.rom: 
+	(cd gecko; make );
+	mv gecko/gecko gecko.rom
+
 rom: 
 	(cd stdrom; ${XA} rom.a65);
 
@@ -52,7 +56,8 @@ rmerr:
 	rm -f *.lab *.err
 
 clean: rmerr
-	rm -f *.obj
+	rm -f *.obj *.rom
 	(cd oaslip; ${MAKE} clean);
+	(cd gecko; ${MAKE} clean);
 
 

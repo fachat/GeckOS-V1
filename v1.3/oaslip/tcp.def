@@ -86,13 +86,17 @@
 #define	SRV_QUEUE	9	/* routine to queue packets for this service */
 				/* routine gets packet slot in x, tcbp & srv */
 #define	SRV_LOOP	11	/* loop routine */
-#define	SRV_LEN		13
+#define	SRV_SIGNAL	13	/* signal callback; ac = signal (TE_*) */
+#define	SRV_LEN		15
 
 /* service flags */
 #define	SFL_MULT	1	/* if set, immediately set up listening  */
 				/* service again on connect */
 
 /* error codes returned to the user */
-#define	E_NOCONN	<-1	/* illegal connection number */
-#define	E_CLOSING	<-2	/* connection already closing */
+#define	TE_NOCONN	<-1	/* illegal connection number */
+#define	TE_CLOSING	<-2	/* connection already closing */
+#define	TE_RESET	<-3	/* connection reset by peer */
+#define	TE_PERMISSION	<-4	/* permission denied */
+#define	TE_FIN		<-5	/*  */
 

@@ -130,8 +130,11 @@ i1 	inx
 	; ok, state has changed since last loop
 	cmp #TCP_CLOSEW
 	bne n1
-	ldx conn
-	jsr tcp_close	; TODO we should actually signal the user process...
+
+;	ldx conn
+;	jsr tcp_close	; TODO we should actually signal the user process...
+	lda #TE_FIN
+	jsr signal_user
 n1
 same	lda fl
 	bne noti
@@ -672,16 +675,22 @@ seqok	/* second, check the RST bit */
 	cmp #TCP_SYNRXD
 	bne seq1
 
-	/* TODO: if from active open, then close! */
+	/* if from active open, then close! */
+	lda #TE_RESET
+	jsr signal_user
+
 	jmp reset	
 
 seq1	cmp #TCP_LASTACK
 	bcs seq2
 
-	/* TODO: flush and close everything */
+	/* flush and close everything */
+	lda #TE_RESET
+	jsr signal_user
+
 	jmp tdiscard
 
-seq2	/* TODO: close */
+seq2 	jsr tclose
 	jmp tdiscard
 
 noreset	/* third, check security and precedence... */
@@ -695,11 +704,15 @@ noreset	/* third, check security and precedence... */
 
 	/*DB("got SYN!^m^j")*/
 
-	/* TODO: flush everything, close */
+	/* flush everything, close */
+	lda #TE_RESET
+	jsr signal_user
+
 	;ldy #TCB_STATE
 	;lda #TCP_CLOSED
 	;sta (tcbp),y
 	jsr tclose
+
 	jmp send_rst
 
 nosyn	/* fifth, check the ack bit */
@@ -862,6 +875,9 @@ idat
 	and #THF_FIN
 	beq nofin
 
+	lda #TE_CLOSING
+	jsr signal_user
+
 	lda #1
 	ldx #0
 	jsr addrxnxt
@@ -930,7 +946,10 @@ noack
 	lda seg_flag
 	and #THF_ACK
 	beq rstack
-	/* TODO: connection reset, close */
+
+	lda #TE_RESET
+	jsr signal_user
+	/* TODO: close? or define that user signal routine should do that... */
 rstack	jmp tdiscard
 
 norst
@@ -2291,13 +2310,13 @@ tcbno	=sysmem
 	; remote_ip, remote_port, local_port, flag, queue_packet
 echo_srv 
 	.byte 0,0,0,0, 0,0, 7,0, SFL_MULT
-	.word tcp_echo_queue-1, 0
+	.word tcp_echo_queue-1, 0, tcp_sig_close-1
 discard_srv 
 	.byte 0,0,0,0, 0,0, 9,0, SFL_MULT
-	.word tcp_disc_queue-1, 0
+	.word tcp_disc_queue-1, 0, tcp_sig_close-1
 chargen_srv 
 	.byte 0,0,0,0, 0,0, 19,0, SFL_MULT
-	.word tcp_disc_queue-1, tcp_chargen_loop-1
+	.word tcp_disc_queue-1, tcp_chargen_loop-1, tcp_sig_close-1
 
 +user_init .(
 	lda #<echo_srv
@@ -2353,9 +2372,9 @@ del
 	jsr tclose
 	clc
 	rts
-notcb	lda #E_NOCONN
+notcb	lda #TE_NOCONN
 	.byt $2c
-closing	lda #E_CLOSING
+closing	lda #TE_CLOSING
 	sec
 	rts
 ok	clc
@@ -2365,7 +2384,7 @@ ok	clc
 +tcp_close .(
 	jsr settcb
 	bcs notcb
-
+&tcp_sig_close
 	ldy #TCB_STATE
 	lda (tcbp),y
 	cmp #TCP_LISTEN
@@ -2409,9 +2428,9 @@ del
 	jsr tclose
 	clc
 	rts
-notcb	lda #E_NOCONN
+notcb	lda #TE_NOCONN
 	.byt $2c
-closing	lda #E_CLOSING
+closing	lda #TE_CLOSING
 	sec
 	rts
 	.)
@@ -2517,6 +2536,33 @@ getlport .(
 	rts
 
 lport 	.word 1024
+	.)
+
+signal_user .(
+sig	=sysmem
+-sysmem	+=1
+
+	tax
+	ldy #TCB_SERVICE
+	lda (tcbp),y
+	sta srv
+	iny
+	lda (tcbp),y
+	sta srv+1
+	
+	ldy #SRV_SIGNAL
+	lda (srv),y
+	iny
+	ora (srv),y
+	beq nosig
+	lda (srv),y
+	pha
+	dey
+	lda (srv),y
+	pha
+	txa
+nosig
+	rts
 	.)
 
 #include "tcpsrv.a65"

@@ -279,12 +279,3 @@ a way missing to remove a driver from the chain.
 The C64 fast serial driver uses this method now. Although flooding the
 computer with bytes slows it down to near unusability.
 
-******** OS/A 1.3.11 ******** jan1997 A.Fachat
-
-Been working on TCP implementation. discard & echo ports work. 
-Also connection closing ceremonies. Packet Retransmission works.
-Retransmission timeouts, timewait timeouts work.
-chargen port works. program registers itself as filesystem.
-
-TODO: 32-bit-modulo, some timeouts...
-

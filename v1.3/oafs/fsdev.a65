@@ -29,10 +29,14 @@
           .byt  4
           .word 0
           .word PRG
+#ifndef NOMMU
 #ifndef ROMTEST
           .byt  8,8,9,9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
 #else
           .byt 8,$18,9,$19,$a,$1a,$b,$1b,$c,$1c,$e,$1e,<-1
+#endif
+#else
+	  .byt <-1
 #endif
           .asc  "fsdev",0
 #else
