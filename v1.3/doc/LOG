@@ -246,3 +246,10 @@ Daniel Dallmann started. Transmitting works.
 Now receiving at slow byterate (though 9600 baud) works. Too many bytes
 (i.e. NMIs) in a short time kill the machine... 
 
+******** OS/A 1.3.9f ******** 22oct1996 A.Fachat
+
+Made NMI driver a bit faster, receiving at fast RS232 works better now
+for low byterates, although still crashes at high byterates.
+SETNMI now returns the old NMI vector, and the NMI routine has not to
+RTS, but to JMP(old_vector).
+

@@ -67,7 +67,8 @@ inp	  =sysmem+6
 outp	  =sysmem+7
 -sysmem   +=8
 rmode	  =syszp
--syszp	  +=1
+oldnmi	  =syszp+1
+-syszp	  +=3
 -sysblk	  -=512
 bytetab	  =sysblk
 inbuf	  =sysblk+256
@@ -87,8 +88,9 @@ prg1      ldx #0
           rts
 prgok     pla
           cmp #DC_IRQ
-          beq devirq
+          beq devirq1
           jmp others
+devirq1	  jmp devirq
 
 /*****************************************************************/
 
@@ -123,6 +125,10 @@ l0	lsr
 	sei
 
 	; program CIA1 timer A for sending
+
+	lda C64CIA2+CIA_DDRA	; pa2 input
+	and #%11111011
+	sta C64CIA2+CIA_DDRA
 	lda #%00000001
 	sta C64CIA1+CIA_ICR	; disable IRQ for CIA1 timer A
 	lda #%10001000		
@@ -131,18 +137,18 @@ l0	lsr
 	sta C64CIA1+CIA_TAL
 	lda #>50
 	sta C64CIA1+CIA_TAH
+	lda #%01010001		; start timer A, force load, cont mode, SR out
+	sta C64CIA1+CIA_CRA
 
 	lda #$df
 	sta C64CIA1+CIA_SDR	; send byte $ff
 	lda #$ff
 	sta C64CIA1+CIA_SDR	; 
 
-	lda #%01010001		; start timer A, force load, cont mode, SR out
-	sta C64CIA1+CIA_CRA
-
 	lda C64CIA1+CIA_ICR		; clear actual irqs
 
 	; program CIA2 for receiving
+
 	lda #%01111111
 	sta C64CIA2+CIA_ICR	; disable all NMI
 	lda C64CIA2+CIA_CRA
@@ -267,40 +273,44 @@ NMIserial .(
 	bmi startbit
 databyte
 	ldx #%00000010
-	stx C64CIA2+CIA_CRB	; stop timer - this is most important
-	inc rmode		; $7f -> $80
+	stx C64CIA2+CIA_CRB	; stop timer
 	ldx #%00001000
 	stx C64CIA2+CIA_ICR	; disable SDR NMI
-	ldx #%10010000
-	stx C64CIA2+CIA_ICR	; enable Flag2 NMI
-	ldx C64CIA2+CIA_ICR
-		; this must be done in 100 CPU cycles (stop bit) 
-	lda C64CIA2+CIA_SDR
 
-	tax
+	inc rmode		; $7f -> $80
+
+	ldx C64CIA2+CIA_SDR
 	lda bytetab,x
 	ldx inp
 	sta inbuf,x
 	inc inp
-	rts
+
+	ldx C64CIA2+CIA_ICR	; clear NMIs
+	ldx #%10010000
+	stx C64CIA2+CIA_ICR	; enable Flag2 NMI
+		; this must be done in 100 CPU cycles (stop bit)
+ 	;rts
+	jmp (oldnmi)
 
 startbit	
 	dec rmode		; $80 -> $7f
 	lda #%00010000
 	sta C64CIA2+CIA_ICR	; disable Flag2 NMI
-	lda #%10001000
-	sta C64CIA2+CIA_ICR	; enable SDR NMI
 	lda #40
 	sta C64CIA2+CIA_TBL
 	lda #%00010010		; force load
-	sta C64CIA2+CIA_CRB	; start timer
+	sta C64CIA2+CIA_CRB
 	lda #100
 	sta C64CIA2+CIA_TBL
 	lda #%00000011
 	sta C64CIA2+CIA_CRB	; start timer
-	lda C64CIA2+CIA_ICR
+
+	lda C64CIA2+CIA_ICR	; clear NMIs
+	lda #%10001000
+	sta C64CIA2+CIA_ICR	; enable SDR NMI
 		; this must be done in 100 CPU cycles
-	rts
+	;rts
+	jmp (oldnmi)
 	.)
 
 nmion	.(
@@ -311,6 +321,8 @@ nmion	.(
 	lda #<NMIserial
 	ldy #>NMIserial
 	jsr SETNMI
+	sta oldnmi
+	sty oldnmi+1
 
 	lda #<100
 	sta C64CIA2+CIA_TBL
@@ -333,7 +345,7 @@ nmioff	.(
 	sta C64CIA2+CIA_ICR
 	lda C64CIA2+CIA_ICR
 
-	clc
+	clc			; TODO - enable other NMI routines
 	jsr SETNMI
 	rts
 	.)
