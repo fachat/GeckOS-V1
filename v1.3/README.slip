@@ -1,0 +1,209 @@
+
+                    TCP/SLIP implementation for the OS/A65
+                    --------------------------------------
+                              (c) 1997 A. Fachat
+
+
+0) Warning: This code is experimental and very ALPHA! 
+   It has bugs, and may damage files on your computer! 
+   The programs are provided "as is", there is no warranty at all,
+   and the usual disclaimers apply.
+
+   I you are a beginner, forget it. This is (still) advanced stuff.
+
+1) Never, never ever run the "fstcp" server on a computer connected
+   to the Internet! 
+   It has no other security protection than checking the IP address of
+   an incoming connection request!
+
+2) Now that you're warned: What's it for?
+
+   The TCP/SLIP implementation will someday be used for telneting to and
+   from an OS/A65 computer. Now it's used to transfer files between an 
+   OS/A65 computer and a (Unix) computer. 
+   
+   The lowest level you can see is the icmp (internet control message
+   protocol) level. If you ping the OS/A65 computer, it replies.
+
+   Then there are the simple test TCP ports "echo" (7), "discard" (9) and
+   "chargen" (19). You can telnet to these ports on the OS/A65 computer.
+
+   The next level is a client-server-application. The server "fstcp"
+   runs on a connected (unix) system. The client "slip.obj" runs on the
+   OS/A65 machine. It tries to connect to a remote server (the fstcp
+   program on the unix machine) and establishes a TCP connection to the
+   server. This connection is then used to transfer file data.
+
+   The procedures described here are for a Linux machine and a C64
+   with OS/A65 running. For the serial line setup you need root 
+   (superuser) access to the unix machine.
+
+3) IP concepts
+
+ a) addresses
+
+   In an IP (internet protocol) network, each computer has an IP number.
+   Normally you have to formally apply at the network information center
+   for an IP number or net. But there are numbers assigned to be used
+   in private, non-connected networks.
+
+   IP addresses are usually noted in the "doted quad" notation, i.e.
+   four decimal values from 0-255 each, separated by dots.
+
+   The private network I use is are the numbers
+
+      192.168.0.*
+
+   i.e. the numbers 192.168.0.1 - 192.168.0.254. There are two numbers
+   missing, they are used as network address (0) and normally as broadcast
+   address (255).
+
+   My unix (i.e. Linux) computer at home has the IP 192.168.0.10. This is
+   the IP the fstcp server is running on. 
+   My C64 (with the OS/A65 operating system) has the IP 192.168.0.13.
+   So if the C64 has the slip.obj program running, I can do a 
+   "ping 192.168.0.13" on my unix machine and get a reply!
+
+ b) routing
+
+   The internet protocol is a packet oriented network. A packet is
+   sent from one host to another, which is normally not the final
+   destination. Each host decides where to send a packet next, to get
+   the packet to its destination. This process is called routing.
+   Normally the program "route" is used to tell the computer which packets
+   to put where.
+
+ c) preparing a serial port
+
+   If you connect a serial line from the C64 to the unix machine, it
+   has to know that it has to send and which IP packets to send there.
+   The first command that has to be done is "slattach", which puts the
+   serial line from "terminal mode" to "SLIP" mode. Then "ifconfig"
+   configures the "sl0" interface with the IP address.  The last command
+   is "route", which tells the unix OS that is has to send packets to the
+   C64's IP address to the interface sl0, which goes to the serial line.
+   The small script "csaip", provided in the oaslip directory, does 
+   everything.
+
+4) TCP concepts
+
+ a) addresses
+
+   TCP addresses not only contain the IP address of the host, but also
+   the "port". The Port is like the number of the flat in a house, when the
+   IP number is the address of this house. Certain port numbers are
+   registered for a special use. Port 7 (echo) for example will send
+   all data you send to it back. 
+   When you open a connection to a port on a remote computer, your own 
+   computer also assigns a local port number to the connection, to have
+   a full TCP address at the sender side.
+
+ b) connections
+
+   In contrary to the IP protocol, the TCP is a connection based protocol.
+   A connection always takes place between two TCP "ports" or
+   two "pairs of IP and TCP port numbers". This connection is defined
+   with the properties:
+     - no data "overtakes" data sent before 
+     - no data is lost
+     - no data is doubled
+   (which are all effects that can occur on IP)
+   With retransmissions, sequence numbers and lots of other things the
+   TCP ensures that the data is received in order and nothing is missing.
+
+ c) establishing a connection
+
+   Normally one side creates a "socket" and "binds" it to a specific
+   local TCP/IP address. It can then either "connect" to a remote
+   socket, or "listen" for remote connect requests. If the socket
+   listens on a port, the "accept" call will bind the local and remote
+   socket to a valid connection.
+
+   Normally a server program listens on a socket while the client tries
+   to connect to it.
+
+ d) used ports
+
+   I chose to use port "8090" as the port where the fstcp server is 
+   listening at.
+
+5) Building the programs
+
+ a) the "fstcp" server
+
+   The fstcp server is a C program, in oaslip/fstcp.c. Going to the oaslip
+   directory and typing "make" should work on unix (linux) machines.
+   In the first lines the port is defined where the server is listening at.
+   Running "make" in the main OS/A soruce directory will also build the 
+   program.
+
+ b) the "slip.obj" client.
+
+   Most other files in the oaslip directory are to build the slip client.
+   Currently there is no define to disable the fstcp stuff.  In the
+   first lines of "main.a65" the OS/A65 IP address (MY_IP) is defined.
+   (note the comma instead of the dots!)  Also the fstcp server TCP
+   address (IP and port) are defined there.
+
+   To assemble the files, you have to have my 6502 crossassembler "xa" 
+   in you path, with version above 2.1.0.
+
+   Then you just can do "make" in the top OS/A65 source directory.
+
+6) running the program
+
+   To run the program, do the following steps:
+
+    - connect the C64 (either with Daniel Dallmans 9600 baud interface,
+      or any other RS232 interface supported by OS/A65) and a serial
+      port of the (Linux-) PC with a Nullmodem cable.
+      
+    - enable SLIP on the serial line by running something similar to 
+      the script oaslip/csaip (does slattach, ifconfig, route).
+
+    - start the fstcp server on the unix host. As arguments it needs
+      the directory (relative from the starting directory) to export
+      and the IP address to which to export the directory.
+      As fstcp might very well be buggy, try to be as cautions as
+      possible. Never ever run it on a computer connected to the internet.
+      Never ever run it as root (superuser). 
+
+    - Transfer the slip.obj file to a disk accessible to the C64 when running
+      OS/A65
+
+    - start OS/A65 on the C64 (see other files, like README.c64)
+
+    - You should have a shell prompt ("#") with a binking cursor.
+      Now start the slip.obj program by typing
+
+          c:slip.obj <a:ser1 >a:ser1 !a:nuldev &
+
+      This starts the slip client from drive c:, piping the STDIO
+      to the C64 serial line ser1 (in standard C64 OS/A65 it's Daniel 
+      Dallmanns 9600 baud interface) and the STDERR to the nulldevice.
+      The slip program receives and sends its SLIP data via STDIO.
+      STDERR prints debugging output.
+
+    - The slip client registers a filesystem with one drive. On a
+      standard C64 OS/A65 system, it will be drive g:.
+      If a connection to the server cannot be found, or breaks
+      later, the fstcp tries to reconnect in periodic intervals.
+
+    - You should now be able to ping the C64, and do telnets to the 
+      echo, discard and chargen ports.
+
+    - It should now also be possible to show the directory of drive g:,
+      and to read files from drive g:
+      This drive will be the contents of the directory given to the fstcp
+      server.
+
+7) (Known) Bugs
+
+   - Write to the tcp server doesn't work: the file is opened and the Boom!
+
+   - floating invalid TCP packets can irritate the tcp client when looking
+     for a server. Then restart the client.
+
+   - Tons of others
+
+

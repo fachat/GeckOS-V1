@@ -117,6 +117,7 @@ nomove
         sbc #>TPH_LEN
         sta qlen+1
 */
+#if 0
 DB("nomove: qp=")
 lda pp+1:jsr EHexout: lda pp:jsr EHexout
 DB(", qlen=")
@@ -125,7 +126,7 @@ DB(", qd=")
 lda pd+1:jsr EHexout: lda pd:jsr EHexout
 DB(", ql=")
 lda pdl+1:jsr EHexout: lda pdl:jsr EHexout:jsr ECrlfout
-
+#endif
         lda pd
         clc
         adc #4

@@ -24,6 +24,17 @@ c64rom			link to 'ROM' image to be loaded
 charom			charom to use (needs ASCII, not PETSCII)
 			(only lower 4kByte are used)
 
+/***************** gecko rom build ********************/
+
+fsiec.a65		modified FSIEC filesystem for Gecko
+gecko.a65		main ROM (includes, wraparound)
+inig2			A small program to make test environment for Gecko
+inig2.a65		on MMU computer, plus source
+inigecko.a65		A small program to make test environment for Gecko
+irtx.a65		program for infrared control
+keydev.a65		device for keyboard
+oadev.a65		device wraparounds (also uses oadev/oa1ds2.a65)
+
 /***************** defines ****************************/
 
 oadef/oa1con.def	global rom (internal) defines
@@ -56,7 +67,7 @@ oa1/stdio.a65		std library (runs in user space, is not in kernel
 oadev/oa1dct.a65	simple centronics/parallel port device
 oadev/oa1dnl.a65	kind of /dev/null
 oadev/oa1ds.a65		two serial devices for ACIA 6551
-oadev/oa1ds3.a65	one serial device for UART 16550A (16 byte FIFO)
+oadev/oa1ds2.a65	one serial device for UART 16550A (16 byte FIFO)
 oadev/oa1dsp.a65	spooler - serialize output requests
 oadev/oa1dt.a65		terminal device - video, keyboard, bell
 oadev/oa1std.a65	standard device routines - for new devices
@@ -102,4 +113,22 @@ oabasic/oabasic4.a65	extended basic interpreter, running in multitasking
 			ported from C64, (c) commodore.
 			Not (yet?) running on the C64 under this OS.
 
+/***************** slip client ************************/
+
+fstcp.c			fstcp server
+main.a65		main client wraparound
+fstcp.a65		fstcp client code
+fstcp.h			fstcp defines
+icmp.a65		ICMP (ping echo) code
+mem.a65a		memory handling for packets
+slipi.a65		SLIP input loop
+slipo.a65		SLIP output loop
+sltcp.def		IP & TCP defines
+tcp.a65			basic TCP code (when packet arrives)
+tcpuser.a65		basic TCP code (user calls)
+tcpsrv.a65		echo, discard, and chargen code
+putil.a65		protocl utility functions
+tutil.a65		TCP utility functions
+util.a65		utility functions
+csaip			small example script to prepare serial line 
 

@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.11
+    OS/A65 Version 1.3.12
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1997 Andre Fachat
@@ -41,7 +41,6 @@
 #define F_RD_CLOSE      6		/* FS_EOF reply processed */
 
 #define F_WR            7
-#define F_WR_SENT       8
-#define F_WR_RXD        9
-
+#define F_WR_WAIT       8		/* buffer ready but not (yet) sent */
+#define F_WR_WEOF       8		/* last buffer ready but not (yet) sent */
 

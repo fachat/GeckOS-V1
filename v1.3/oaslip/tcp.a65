@@ -278,11 +278,11 @@ illtd	DB("tdisc with illegal slot!^m^j")
 	
 
 tcpok	/* here we have a valid TCP packet in (pd),0-pdl. */
-
+/*
 DB("tcpok pp=")
 lda pp+1:jsr EHexout:lda pp:jsr EHexout
 jsr ECrlfout
-
+*/
 	lda #0		; data to be discarded at packet beginning.
 	sta discd
 	sta discd+1
@@ -327,7 +327,7 @@ tdisc1	jmp tdisc
 */
 
 looktcb
-	DB("LookTCB^m^j")
+/*	DB("LookTCB^m^j")*/
 
 	jsr findtcb
 	bcc found		/* TODO: send reset on no connection? */
@@ -339,7 +339,7 @@ found
 	lda (tcbp),y
 	sta state
 
-#ifdef DEBUGTCP
+#if 0 /*def DEBUGTCP*/
 	pha
 	lda tcbp+1
 	jsr EHexout
@@ -962,13 +962,14 @@ hasdata	.(		/* TODO: check with discd */
 	.)
 
 bangbuf	.(
+#if 0
 DB("bangbuf: pp=")
 lda pp+1:jsr EHexout: lda pp:jsr EHexout
 DB(", pd=")
 lda pd+1:jsr EHexout: lda pd:jsr EHexout
 DB(", sla="):lda slotladr:jsr EHexout
 jsr ECrlfout
-
+#endif
 	; first exchange port and IP addresses
 	jsr tcpxp
 	jsr tcpxip
@@ -1025,8 +1026,8 @@ x2	lda (pd),y
 	jsr ECrlfout
 #endif
 	ldx pslot
-lda #<-1
-sta pslot
+	lda #<-1
+	sta pslot
 	jmp queueslot
 needmove
 	jmp tdisc
@@ -1461,9 +1462,10 @@ piok
 	lda #>TH_OPTIONS
 	sta ql+1
 */
+#if 0
 DB("send_* slot=")
 lda pslot:jsr EHexout:jsr ECrlfout
-
+#endif
 	jsr setout
 	jsr setseq
 	jsr setack
