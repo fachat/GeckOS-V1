@@ -137,11 +137,13 @@ tstwater  cmp #E_SEMPTY
           beq wh
           cmp #E_SHWM
           bne twl
-wh        jsr rtshi
+wh      ldx #0  
+	jsr rtshi
           jmp tx         ; unbedingt
 twl       cmp #E_SLWM
           bne tx
-wl        jsr rtslo
+wl      ldx #0  
+	jsr rtslo
 
 tx        bit status
           bvc irqhs
@@ -155,7 +157,7 @@ tx        bit status
 
 	tya
 	and #%01000000		; DSR high?
-	beq irqhs		; -> irqhs
+	bne irqhs		; -> irqhs
 
           ldx instr		; send new data byte
           jsr GETC
