@@ -50,7 +50,7 @@
 				   It's faster without, but allows more
 				   tasks with */
 
-/*#define NMIDEV*/
+#define NMIDEV			/* necessary for fast RS232 */
 				
 /*#define C64NEEDCIA1*/		/* disables reading CIA1 ICR in kernel -
 				   needs to be done in device then, as
