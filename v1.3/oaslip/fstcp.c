@@ -154,6 +154,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	dir = argv[i++];
+	printf("dir=%s\n",dir);
+
+	if(chdir(dir)<0) { 
+	  fprintf("Couldn't change to directory %s, errno=%d (%s)\n",
+			dir, errno, strerror(errno));
+	  exit(1);
+	}
 
 	for(i=0;i<MAXFILES;i++) {
 	  files[i].state = F_FREE;

@@ -162,6 +162,8 @@ wrongesc
 	txa
 	sta oslot,y
 	inc onslot
+
+jsr getbadr:bcc lll1:DB("illegal slot in queueslot!^m^j"):lll1
 #if 0
 px = syszp
 -syszp +=2

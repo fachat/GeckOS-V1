@@ -30,12 +30,18 @@
 #define FSP_FD          2
 #define FSP_DATA        3
 
-/* status values. +$80 -> rx slot ok, +$40 -> tx slot ok */
+/* status values */
 #define F_FREE          0               /* must be 0 */
-#define F_RD_SENT       1
-#define F_WR_SENT       2
-#define F_CMD_SENT      3
-#define F_RD            4
-#define F_WR            5
+#define F_CMD_SENT      1
+
+#define F_RD            2		/* no buffer to put to stream */
+#define F_RD_SENT       3		/* FS_READ request sent */
+#define F_RD_RXD        4		/* FS_WRITE reply received */
+#define F_RD_EOF        5		/* FS_EOF reply received */
+#define F_RD_CLOSE      6		/* FS_EOF reply processed */
+
+#define F_WR            7
+#define F_WR_SENT       8
+#define F_WR_RXD        9
 
 

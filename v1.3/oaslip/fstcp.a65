@@ -27,7 +27,6 @@
 
 #define	MAXQUEUE	MAXFILES
 
-
 status	=sysmem
 -sysmem	+=MAXFILES
 stream	=sysmem
@@ -36,6 +35,9 @@ fscmd	=sysmem
 -sysmem	+=MAXFILES
 fstask	=sysmem
 -sysmem	+=MAXFILES
+fsrxb	=sysmem		; received data buffer to be transfered to stream
+-sysmem	+=MAXFILES
+
 fsqueue	=sysmem
 -sysmem	+=MAXQUEUE
 fsnq	=sysmem
@@ -114,13 +116,156 @@ slot	=sysmem+4
 fd	=sysmem+5
 -sysmem	+=6
 
-	/* check streams and get/put data */
+/****************************************************************************
+ * check streams and get/put data 
+ */
 dloop	.(
+	ldx #<-1
+	stx fd
+l0	ldx fd
+	inx
+	cpx #MAXFILES
+	bcc l1
 	rts
+l1 	stx fd
+	lda status,x
+	cmp #F_RD
+	bne rd1
+	
+	; do read check 
+	lda stream,x
+	tax
+	lda #SC_STAT
+	jsr STRCMD
+	cmp #E_NUL
+	bne noend
+
+rdclose	lda #FS_CLOSE
+	jsr send_msg
+	bcs l0a
+rdc1	ldx fd
+	lda stream,x
+	tax
+	lda #SC_EOF
+	jsr STRCMD
+	lda #F_FREE
+	ldx fd
+	sta status,x
+l0a	jmp l0
+noend
+	cmp #E_SLWM
+	beq doit
+	cmp #E_SEMPTY
+	bne l0a
+doit	lda #FS_READ
+	jsr send_msg
+	ldx fd
+	lda #F_RD_SENT
+	sta status,x	; this is changed to F_RD_RXD when a packet was rxd
+	jmp l0
+
+rd1	cmp #F_RD_RXD
+	beq rdrx
+	cmp #F_RD_EOF
+	beq rdrx
+	cmp #F_RD_CLOSE
+	beq rdclose
+	jmp tx1
+rdrx
+	lda fsrxb,x
+	tax
+	jsr getbadr
+	bcc rd1a
+DB("illegal block adr in dloop rd^m^j")
+rd1b	jmp rdclose
+rd1a
+	sta pp
+	sty pp+1
+rdloop
+	ldy #3
+	lda (pp),y
+	sta len+1
+	dey
+	lda (pp),y
+	sta len
+	dey
+	lda (pp),y
+	tax
+	dey
+	lda (pp),y
+	clc
+	adc pp
+	sta pd
+	txa
+	adc pp+1
+	sta pd+1
+datloop
+	lda len
+	ora len+1
+	bne datok
+
+	ldx fd
+	lda fsrxb,x
+	tax
+	jsr bfree
+
+	ldx fd
+	lda status,x
+	cmp #F_RD_EOF
+	bne l00
+	lda #F_RD_CLOSE
+	.byt $2c
+l00	lda #F_RD
+	sta status,x
+	jmp l0
+datok
+	ldx fd
+	lda stream,x
+	tax
+	ldy #0
+	lda (pd),y
+	jsr PUTC
+	bcc nextd
+	cmp #E_NUL
+	bne noclose
+DB("rxd E_NUL from stream^m^j")
+	jmp rdclose
+noclose
+	cmp #E_SFULL
+	bne nextd
+	;  buffer full, so put length back to block
+	ldy #0
+	lda pd
+	sec
+	sbc pp
+	sta (pp),y
+	iny
+	lda pd+1
+	sbc pp+1
+	sta (pp),y
+	iny
+	lda len
+	sta (pp),y
+	iny
+	lda len+1
+	sta (pp),y
+	jmp l0	
+nextd	inc pd
+	bne n0
+	inc pd+1
+n0 	lda len
+	bne n1
+	dec len+1
+n1	dec len
+	jmp datloop
+
+tx1	jmp l0
 	.)
 
+/****************************************************************************
+ * process requests from filesystem interface 
+ */
 rxloop	.(
-
 	clc
 	jsr RECEIVE
 	bcc ok
@@ -240,6 +385,9 @@ l0	lda status,y
 found	rts
 	.)
 
+/****************************************************************************
+ * check incoming packets 
+ */
 qloop	.(
 	lda fsnq
 	bne gotone
@@ -253,12 +401,14 @@ gotone
 
 DB("pp=")
 lda pp+1:jsr EHexout: lda pp:jsr EHexout
-DB(", do=")
+DB(" do=")
 ldy #1: lda (pp),y: jsr EHexout
 ldy #0: lda (pp),y: jsr EHexout
 DB(", l=")
 ldy #3: lda (pp),y: jsr EHexout
 ldy #2: lda (pp),y: jsr EHexout
+DB(" slot=")
+lda fsqueue:jsr EHexout
 jsr ECrlfout
 
 	ldy #0
@@ -300,19 +450,29 @@ noillfd
 	beq noilllen
 
 illlen	DB("illegal len^m^j")
-	ldx fsqueue
+disc	ldx fsqueue
 	jsr bfree
 	jmp nextbuf
 noilllen
 	ldy #FSP_CMD
 	lda (pd),y
 	cmp #FS_REPLY
-	bne noreply
-
+	beq reply
+	jmp noreply
+reply
 	/* first (and only) data byte is reply value */
 	lda len
 	cmp #4
 	bne illlen
+
+	ldx fd
+	lda status,x
+	cmp #F_CMD_SENT
+	beq noillreply
+DB("reply but not CMD_SENT: st=")
+lda status,x:jsr EHexout:jsr ECrlfout
+	jmp disc
+noillreply
 
 #ifndef NOMMU
 	sec
@@ -323,12 +483,20 @@ DB("didn't get SEM_SENDBUF^m^j")
 sec
 	rts
 gotbuf
+DB("got SEM_SENDBUF^m^jpd=")
+lda pd+1:jsr EHexout:lda pd:jsr EHexout
+DB(", retval=")
+ldy #FSP_DATA:lda (pd),y:jsr EHexout
+DB(", fscmd=")
+ldy fd:lda fscmd,y:jsr EHexout
+jsr ECrlfout
 #endif
 	ldy #FSP_DATA
 	lda (pd),y
 	sta PCBUF+FS_X_ERR
 	cmp #E_OK
 	bne l1
+	ldy fd
 	lda fscmd,y
 	cmp #FS_OPEN_RD
 	beq rd
@@ -357,8 +525,50 @@ l1
 	jmp nextbuf
 	
 noreply	cmp #FS_WRITE
+	beq write
+	cmp #FS_EOF
 	bne nowrite
-	
+	ldy #F_RD_EOF
+	.byt $2c
+write	ldy #F_RD_RXD
+	ldx fd
+	lda status,x
+	cmp #F_RD_SENT
+	bne illwrite
+	lda fsqueue
+	ldx fd
+	sta fsrxb,x
+	tya
+	sta status,x
+
+	ldx fsqueue
+	jsr getbadr
+	sta pp
+	sty pp+1
+	ldy #0
+	lda (pp),y
+	clc
+	adc #FSP_DATA
+	sta (pp),y
+	iny
+	lda (pp),y
+	adc #0
+	sta (pp),y
+	iny
+	lda (pp),y
+	sec
+	sbc #FSP_DATA
+	sta (pp),y
+	iny
+	lda (pp),y
+	sbc #0
+	sta (pp),y
+	jmp nextbuf
+illwrite
+	DB("illegal write ^m^j")
+	ldx fsqueue
+	jsr bfree
+	jmp nextbuf
 nowrite
 	DB("packet not a reply!^m^j")
 	ldx fsqueue
@@ -378,10 +588,60 @@ l0	lda fsqueue,y
 
 	.)
 
+/****************************************************************************
+ * process signal from tcp
+ */
 fstcp_signal .(
 inc $d020
 	sta signal
+	DB("fstcp_signal: ")
+	lda signal: jsr EHexout
+	jsr ECrlfout
 	jsr tcp_sig_close
+	rts
+	.)
+
+/****************************************************************************/
+
+send_msg .(
+	sta cmd
+	ldy #0
+	lda #TCP_DOFFSET+3
+
+	jsr balloc
+	bcs retnomem2
+
+	lda #TCP_DOFFSET
+	jsr getpinfo
+	bcs retnomem2
+
+	/* save stream and prepare PCBUF for sending */
+	ldy #0
+	lda cmd
+	sta (pd),y
+	iny 
+	lda #3
+	sta (pd),y
+	iny
+	lda fd
+	sta (pd),y
+
+	ldy #0
+	lda #TCP_DOFFSET
+	sta (pp),y
+	iny
+	lda #0
+	sta (pp),y
+	iny
+	lda #3
+	sta (pp),y
+	iny
+	lda #0
+	sta (pp),y
+
+	ldx pslot
+	jsr tx_queue_packet
+retnomem2
 	rts
 	.)
 

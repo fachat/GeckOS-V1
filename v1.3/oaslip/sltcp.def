@@ -156,3 +156,8 @@
 #define	TE_PERMISSION	<-4	/* permission denied */
 #define	TE_FIN		<-5	/*  */
 
+#define	TE_RESET0	6
+#define	TE_RESET1	7
+#define	TE_RESET2	8
+#define	TE_RESET3	9
+
