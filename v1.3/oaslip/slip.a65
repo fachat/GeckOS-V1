@@ -337,10 +337,12 @@ wrongesc
 	txa
 	sta oslot,y
 	inc onslot
+	clc
 	rts
 drop
 	DB("Packet dropped due to full queue^m^j")
 	jsr bfree
+	sec
 	rts
 	.)
 
