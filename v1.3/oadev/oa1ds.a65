@@ -31,11 +31,15 @@
           .(
           .word devend1
           jmp prg1
-          .asc "ser1",0
+          .asc "ser",sernr, 0
+
+-sernr += 1
 
 devend1   .word devend2
           jmp prg2
-          .asc "ser2",0
+          .asc "ser",sernr, 0
+
+-sernr += 1
 
 dev       =sysmem
 div       =sysmem+1

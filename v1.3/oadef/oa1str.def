@@ -103,6 +103,7 @@
 #define   E_FWPROT  <-23
 
 #define	  E_NOIRQ   <-32      /* irq routine has not removed irq source */
+#define	  E_VERSION <-33      /* wrong executable file version */
 
 #define   E_CMD     <-65
 #define   E_Q       <-66

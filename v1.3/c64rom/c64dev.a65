@@ -76,6 +76,8 @@
 
 devstart
 
+-sernr = "1"
+
 #include  "oadev/oa1dt.a65"	; video device is merged with OS/A now...
 #include  "oadev\oa1dnl.a65"
 #include  "oadev\oa1dsp.a65"

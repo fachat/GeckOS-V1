@@ -44,7 +44,8 @@
           .(
 	  .word devend2
 	  jmp prg1
-	  .asc "ser1",0
+	  .asc "ser", sernr ,0
+-sernr += 1
 
 /*
  * status: Bit 	0 = 1= handshake enabled
