@@ -41,6 +41,7 @@
 
 #define	MY_IP		192,168,0,13
 #define	MAXOQUEUE	4
+#define	INBUF		64
 
 #define	C64
 
@@ -160,6 +161,8 @@ PRG	.(
 	jsr binit
 	bcs exit
 DB("^m^jbinit ok^m^j")
+	jsr ibufinit
+
 	jsr oinit
 	bcs exit
 DB("^m^joinit ok^m^j")
@@ -175,21 +178,136 @@ MyIP	.byt MY_IP
 
 doloop
 	jsr loopin
+	jsr loopout
 	jsr SUSPEND
 	jmp doloop
 
 /******************** output loop ***********************/
 	.(
 
-onslot	=sysmem
-oslot	=sysmem+1
--sysmem	+=MAXOQUEUE+1
+omode	=sysmem
+ol	=sysmem+1
+onslot	=sysmem+3
+oslot	=sysmem+4
+-sysmem	+=MAXOQUEUE+4
+
+op	=syszp
+-syszp	+=2
 
 &oinit	.(
 	lda #0
 	sta onslot
+	sta omode
 	clc
 	rts
+	.)
+
+&loopout .(
+	lda omode
+	bne inwork
+	ldy onslot
+	bne newpacket
+ende	rts
+newpacket
+	ldx oslot
+	jsr getbadr
+	sta op
+	sty op+1
+	jsr getblen
+	sta ol
+	sty ol+1
+	lda #1
+	sta omode
+inwork
+	cmp #1
+	bne esc1
+	lda #SL_END
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+	inc omode
+	lda omode
+esc1	
+	cmp #2
+	bne esc2
+next	ldy #0
+	lda (op),y
+	cmp #SL_END
+	beq escape
+	cmp #SL_ESC
+	beq escape
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+incp	
+	inc op
+	bne l0
+	inc op+1
+l0	lda ol
+	bne l1
+	dec ol+1
+l1	dec ol
+
+	lda ol
+	ora ol+1
+	bne next
+
+	inc omode
+	lda omode
+esc2
+	cmp #3
+	bne esc3
+	lda #SL_END
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende
+			; free buffer slot
+	ldx oslot
+	jsr bfree
+
+	dec onslot
+	ldy #0
+l2	cpy onslot
+	beq reset
+	lda oslot+1,y
+	sta oslot,y
+	iny
+	bne l2
+
+reset	lda #0
+	sta omode
+ende2	rts
+
+escape	lda #4
+	sta omode
+esc3
+	cmp #4
+	bne esc4
+	lda #SL_ESC
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende2
+	inc omode
+	lda omode
+esc4
+	cmp #5
+	bne reset
+	ldy #0
+	lda (op),y
+	cmp #SL_ESC
+	beq escesc
+	cmp #SL_END
+	bne wrongesc
+	lda #SL_ESC_END
+	.byt $2c
+escesc	lda #SL_ESC_ESC
+wrongesc
+	ldx #STDOUT
+	jsr PUTC
+	bcs ende2
+	lda #2
+	sta omode
+	jmp incp
 	.)
 
 &queueslot .(	; queue slot XR for output
@@ -246,9 +364,58 @@ iresp	sta ip			/* reset packet */
 	clc
 oops	rts
 
+inbuf	.(
+
+ibuf 	=sysmem
+-sysmem	+=INBUF
+len	=sysmem
+rp	=sysmem+1
+-sysmem	+=2
+p	=syszp
+-syszp	+=2
+
+#if 0
+	lda len
+	bne buffd
+
+	lda #<ibuf
+	sta p
+	lda #>ibuf
+	sta p+1
+	ldy #p
+	ldx #STDIN
+	lda #INBUF
+	jsr GETB
+	bcs err
+	sta len
+	lda #0
+	sta rp
+buffd
+	ldx rp
+	lda ibuf,x
+	inx
+	stx rp
+	cpx len
+	bne ok
+	ldx #0
+	stx len
+ok	
+	clc
+err	rts
+
+#endif
+
+&&ibufinit
+	lda #0
+	sta len
+	clc
+	rts
+	.)
+
 &loopin	.(
 	ldx #STDIN
 	jsr GETC
+	;jsr inbuf
 	bcc gotbyt
 	rts
 gotbyt
