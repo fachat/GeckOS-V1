@@ -115,6 +115,9 @@ l0	lda MyIP-IPH_SRC,y
 	jmp lx
 
 +sendip
+DB("sendip: idlen=")
+lda idlen+1: jsr EHexout: lda idlen: jsr EHexout: jsr ECrlfout
+
 	lda #20
 	sta ipl
 	clc
@@ -167,13 +170,23 @@ lx	lda #0
 	txa
 	sta (ip),y
 
-#ifdef DEBUGSEND
+#if 1 /*def DEBUGSEND*/
 DB("^m^jSend packet:^m^j")
 jsr printpacket
 tsx
 txa
 jsr EHexout
 #endif
+DB("trunc packet: slot=")
+lda islot: jsr EHexout
+DB(" at adr=")
+ldx islot: jsr getbadr: pha: tya: jsr EHexout: pla: jsr EHexout
+lda #"[": jsr ECout
+ldx islot: jsr getblen: pha: tya: jsr EHexout: pla: jsr EHexout
+DB("] to len=")
+lda ilen+1: jsr EHexout: lda ilen: jsr EHexout
+jsr ECrlfout
+
 	ldx islot
 	lda ilen
 	ldy ilen+1

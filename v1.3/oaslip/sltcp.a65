@@ -1251,21 +1251,32 @@ myslot	=sysmem
 myp	=syszp
 -syszp	+=2
 
-clc		; somewhere here is a bug that crashes memory mangement
-rts
+DB("copy_n_queue: ip=")
+lda ip+1: jsr EHexout: lda ip: jsr EHexout
+DB(", request ")
+lda doffset: jsr EHexout
+DB(" b.^m^j")
 
 	lda doffset
 	ldy #0
 	jsr balloc
-	bcs nobuffer
+	bcc gotbuffer
+	rts
+gotbuffer
 	stx myslot
 	jsr getbadr
 	sta myp
 	sty myp+1
 
+DB("got buffer slot ")
+lda myslot: jsr EHexout: DB(" @ address ")
+lda myp+1: jsr EHexout: lda myp: jsr EHexout
+jsr ECrlfout
+
 	ldy #0
 l0	lda (ip),y
 	sta (myp),y
+jsr EHexout
 	iny
 	cpy doffset
 	bne l0
@@ -1289,6 +1300,8 @@ l0	lda (ip),y
 	sbc discd+1
 	sta (ip),y
 
+lda #" ": jsr ECout: tya: jsr EHexout
+
 	lda myp
 	sta ip
 	clc
@@ -1307,7 +1320,7 @@ l0	lda (ip),y
 	sta idlen+1
 
 	lda tslot
-	jsr queue_packet	
+	jsr queue_packet
 	bcs boom
 
 	lda dlen
@@ -1320,6 +1333,13 @@ boom
 
 	lda myslot
 	sta tslot
+
+DB("copy_n_queue returns ip=")
+lda ip+1: jsr EHexout: lda ip: jsr EHexout
+DB(", id=")
+lda id+1: jsr EHexout: lda id: jsr EHexout
+jsr ECrlfout
+
 	clc
 nobuffer
 	rts
@@ -1447,6 +1467,14 @@ l1	dec zp
 	bne dloop
 
 	jsr ECrlfout
+
+DB("queue_packet: return slot ")
+lda slot: jsr EHexout: lda " ": jsr ECout
+ldx slot: jsr getbadr: pha: tya: jsr EHexout: pla: jsr EHexout: 
+lda #"[": jsr ECout
+ldx slot: jsr getblen: pha: tya: jsr EHexout: pla: jsr EHexout: 
+DB("]")
+jsr printmem
 
 	ldx slot
 	jsr bfree
