@@ -566,13 +566,18 @@ nodat
 	sta (id),y
 
 	jsr iniseq
+	jsr setseq
 
 	ldy #TCB_STATE
 	lda #TCP_SYNRXD
 	sta (tcbp),y
 
 	jsr setack
-	jsr incuna
+
+	lda #1
+	ldx #0
+	jsr addtxnxt
+	;jsr incuna
 
 	jmp bangbuf
 
@@ -597,7 +602,7 @@ tcp_finw1  tcp_finw2  tcp_closew tcp_lastack tcp_closing
 tcp_timew
 tcp_synrxd .(
 
-needack	=sysmem
+&needack =sysmem
 -sysmem	+=1
 
 	lda #0
@@ -772,7 +777,7 @@ ack6	cmp #TCP_TIMEW
 	jmp bangbuf
 
 	/* sixth, check the URG bit */
-do6
+&do6
 	/* seventh, process segment text */ 
 	
 	lda state
@@ -862,36 +867,81 @@ noslot	clc
 
 tcp_syntxd .(
 	DB("SynTxd^m^j")
-jmp tdiscard
-#if 0
+
+	/* first, check ack bit */
 	lda seg_flag
-	pha
-
-	jsr rxhdr
-	bcs discp
-	pla
-	and #THF_SYN + THF_ACK
-	beq disc
-	cmp #THF_ACK
-	beq disc
-	pha		; now SYN is set
-
-	/* TODO: send ACK */
-
-	pla
-	cmp #THF_SYN
+	and #THF_ACK
 	beq noack
-	; here SYN and ACK are set
+
+	jsr checkack
+	bcc noack
+
+badack	DB("Bad Ack in packet^m^j")
+	jmp send_rst
+noack	
+	/* second, check rst bit */
+	lda seg_flag
+	and #THF_RST
+	beq norst
+
+	lda seg_flag
+	and #THF_ACK
+	beq rstack
+	/* TODO: connection reset, close */
+rstack	jmp tdiscard
+
+norst
+	/* third, check security */
+
+	/* fourth, check syn bit */
+	lda seg_flag
+	and #THF_SYN
+	beq nosyn
+
+	jsr getseq	; get rcv_nxt number from packet
+
+	lda seg_flag
+	and #THF_ACK
+	beq nosynack
+
+	ldy #TH_ACK	/* copy 2 SND_UNA */
+a1	lda (id),y
+	sta (tcbp),y
+	iny
+	cpy #TH_ACK+4
+	bcc a1
+
+	jsr ackxmit
+nosynack
+	jsr aheadiss
+	bcs noiss	; SYN not yet ACK'd
+
 	lda #TCP_ESTAB
-	.byt $2c
-noack	lda #TCP_SYNRXD
 	ldy #TCB_STATE
 	sta (tcbp),y
-	rts
+	sta state
 
-discp	pla
-disc	jmp discard
-#endif
+	lda #1
+	sta needack
+
+	jmp do6
+
+noiss	lda #TCP_SYNRXD
+	ldy #TCB_STATE
+	sta (tcbp),y
+
+	jsr setack
+	jsr decseq	; dec snd_nxt back to ISS
+	jsr setseq
+	lda #1
+	ldx #0
+	jsr addtxnxt	; and inc for SYN
+
+	ldy #TH_FLAG
+	lda #THF_ACK+THF_SYN
+	jmp bangbuf
+
+nosyn	jmp tdiscard
 	.)
 
 tdiscard .(
@@ -1076,6 +1126,21 @@ noack
 	.)
 #endif
 
+aheadiss .(	/* TODO: actually save ISS. this assumes we don't send data
+		   before we are in TCP_ESTAB! */
+	ldy #TH_SEQ
+l0	lda (id),y
+	cmp (tcbp),y
+	bne bad
+	iny
+	cpy #TH_SEQ+4
+	bcc l0
+	clc
+	rts
+bad	sec
+	rts
+	.)
+
 checkseq .(
 	ldy #TH_SEQ	/* we don't handle disordered packets - ignore them */
 seql	lda (id),y
@@ -1114,6 +1179,8 @@ seqt	lda tmp-TCB_RCV_NXT,y
 	iny
 	cpy #TCB_RCV_NXT+4
 	bcc seqt
+	bcs setdiscd
+
 seqmm1	DB("Sequence mismatch^m^j")
 	sec
 	rts
@@ -1225,7 +1292,7 @@ chkbuf	.(
 ret	rts
 	.)
 
-checkack .(
+checkack .(	/* TODO: check for below ISS */
 	/* first check with SND_UNA - if less then ignore */
 	ldy #TH_ACK
 l1	lda (id),y
@@ -1272,7 +1339,36 @@ badack1	lda #3		; ack ahead
 	rts
 	.)
 
-iniseq	.(
+getseq	.(
+	ldy #TCB_RCV_NXT
+l0	lda (id),y
+	sta (tcbp),y
+	iny
+	cpy #TCB_RCV_NXT+4
+	bcc l0
+
+	lda #1
+	ldx #0
+	jmp addrxnxt
+	.)
+
+&decseq	.(
+	ldx #3
+	ldy #TCB_SND_NXT+3
+	sec
+	lda (tcbp),y
+	sbc #1
+	sta (tcbp),y
+l0	dey
+	lda (tcbp),y
+	sbc #0
+	sta (tcbp),y
+	dex
+	bne l0
+	rts
+	.)
+
+&iniseq	.(
 	ldy #TCB_SND_NXT
 	lda $dc07
 	sta (tcbp),y
@@ -1285,36 +1381,27 @@ iniseq	.(
 	iny
 	lda $dd06
 	sta (tcbp),y
-
 	sec
 	ldy #TCB_SND_NXT+3
 	lda (tcbp),y
-	sbc #1
+	sbc #0
 	ldy #TCB_SND_UNA+3
 	sta (tcbp),y
-	ldy #TH_SEQ+3
-	sta (id),y
 	ldy #TCB_SND_NXT+2
 	lda (tcbp),y
 	sbc #0
 	ldy #TCB_SND_UNA+2
 	sta (tcbp),y
-	ldy #TH_SEQ+2
-	sta (id),y
 	ldy #TCB_SND_NXT+1
 	lda (tcbp),y
 	sbc #0
 	ldy #TCB_SND_UNA+1
 	sta (tcbp),y
-	ldy #TH_SEQ+1
-	sta (id),y
 	ldy #TCB_SND_NXT
 	lda (tcbp),y
 	sbc #0
 	ldy #TCB_SND_UNA
 	sta (tcbp),y
-	ldy #TH_SEQ
-	sta (id),y
 	rts
 	.)
 
@@ -1952,6 +2039,9 @@ l1	lda (tcbp),y
 	rts
 	.)
 
+&send_syn
+	lda #THF_SYN
+	.byt $2c
 &send_reset
 	lda #THF_RST
 	.byt $2c
@@ -1985,7 +2075,7 @@ ok	stx qslot
 	jsr setqack
 
 	lda tmp
-	and #THF_FIN
+	and #THF_FIN+THF_SYN
 	beq nofin
 
 	lda #1
@@ -2069,6 +2159,9 @@ echo_srv
 discard_srv 
 	.byte 0,0,0,0, 0,0, 9,0, SFL_MULT, <tcp_disc_queue-1, >tcp_disc_queue-1
 
+fstcp_srv 
+	.byte 192,168,0,1, 31, 154, 0,0, 0,<tcp_disc_queue-1, >tcp_disc_queue-1
+
 +user_init .(
 	lda #<echo_srv
 	ldy #>echo_srv
@@ -2076,6 +2169,9 @@ discard_srv
 	lda #<discard_srv
 	ldy #>discard_srv
 	jsr tcp_listen
+	lda #<fstcp_srv
+	ldy #>fstcp_srv
+	jsr tcp_open
 	rts
 	.)
 
@@ -2210,6 +2306,77 @@ closing	lda #E_CLOSING
 	clc
 	;rts
 notcb	rts
+	.)
+
++tcp_open .(
+	sta srv
+	sty srv+1
+	jsr gettcb
+	bcs notcb
+
+	ldy #TCB_SERVICE
+	lda srv
+	sta (tcbp),y
+	iny
+	lda srv+1
+	sta (tcbp),y
+
+	ldy #SRV_RIP
+l0	lda (srv),y
+	sta (tcbp),y
+	iny	
+	cpy #SRV_RIP+4
+	bcc l0
+
+	ldy #TCB_TRGIP
+l1	lda MyIP-TCB_TRGIP,y
+	sta (tcbp),y
+	iny
+	cpy #TCB_TRGIP+4
+	bcc l1
+
+	ldy #SRV_RPORT
+	lda (srv),y
+	tax
+	iny
+	lda (srv),y
+	ldy #TCB_SRCP+1
+	sta (tcbp),y
+	dey
+	txa
+	sta (tcbp),y
+
+	jsr getlport
+
+	ldy #TCB_TRGP
+	sta (tcbp),y
+	iny
+	txa
+	sta (tcbp),y
+
+	jsr iniseq
+
+	ldy #TCB_STATE
+	lda #TCP_LISTEN
+	sta (tcbp),y
+
+ 	jsr send_syn
+	clc
+notcb	rts
+	.)
+
+getlport .(
+	lda #1
+	clc
+	adc lport
+	sta lport
+	tax
+	lda #0
+	adc lport+1
+	sta lport+1
+	rts
+
+lport 	.word 1024
 	.)
 
 #include "tcpsrv.a65"
