@@ -39,6 +39,9 @@ fsibm:
 fsdev:
 	(cd oafs; ${XA} fsdev.a65);
 
+fstcp: slip
+	(cd oaslip; ${MAKE} fstcp);
+
 sh:
 	(cd oash; ${XA} sh.a65);
 
@@ -50,4 +53,6 @@ rmerr:
 
 clean: rmerr
 	rm -f *.obj
+	(cd oaslip; ${MAKE} clean);
+
 

@@ -76,7 +76,7 @@
 #define	TCP_OFFSET	8	/* offset from IP hdr start to TCP pseudo hdr */
 
 /* service struct */
-#define	SRV_RIP		0	
+#define	SRV_RIP		0	/* SRV_RIP must be == TCB_SRCIP */
 #define	SRV_RPORT	4
 #define	SRV_LPORT	6
 #define	SRV_FLAG	8	/* service flags */

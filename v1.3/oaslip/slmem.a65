@@ -656,7 +656,7 @@ pyr	=sysmem+2
 	stx pxr
 	sty pyr
 
-/*DB("^m^jMemory Free List:^m^j")*/
+DB("^m^jMemory Free List:^m^j")
 	lda flist
 	sta p
 	lda flist+1
@@ -664,7 +664,7 @@ pyr	=sysmem+2
 	ldx #STDERR
 loop
 	lda p+1
-	beq ende
+;	beq ende
 	jsr EHexout
 	lda p
 	jsr EHexout
