@@ -509,6 +509,13 @@ pre5      adc #1:bne pre5
 
           .(
 +pnmi
+#ifdef C64NMIRESET
+	jmp RESET
++setnmi lda #E_NOTIMP
+        sec
+        rts
+#else
+
 #ifdef  NOMMU     
 #ifdef  NMIDEV
           pha
@@ -551,6 +558,7 @@ ne        jsr memtask
           sec
           rts
 #endif
+#endif			/* C64 */
           .)
 
           .(

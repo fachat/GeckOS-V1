@@ -1,0 +1,111 @@
+
+/****************************************************************************
+   
+    OS/A65 Version 1.3.8
+    Multitasking Operating System for 6502 Computers
+
+    Copyright (C) 1989-1996 Andre Fachat 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+****************************************************************************/
+
+
+/**********************************************************************/
+/* 				SLIP				      */
+/*		Serial Line Internet Protocol Driver		      */
+/*								      */
+/* Driver connects STDIN/OUT with a serial line internet protocol     */
+/* 								      */
+/* Options:							      */
+/*   ROM							      */
+/*   NOPRG							      */
+/* 								      */
+/**********************************************************************/
+
+#ifndef ROM
+
+#define	NOPRG
+
+PRGSTART  =$1000
+
+#ifndef SLIPDEV
+#define	SLIPDEV	0
+#endif
+
+#endif
+
+          .(
+#ifdef ROM
+
+          .word PRGEND
+          .byt  PK_PRG
+          .byt  8
+          .byt  SLIPDEV,SLIPDEV
+          .word PRG
+#ifndef ROMTEST
+          .byt  $8,$8,$9,$9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
+#else
+          .byt $c,$1c,$d,$1d,$e,$1e,<-1
+#endif /* ROMTEST */
+
+          .byt  "shell",0,"shell b c:auto.bat",0
+
+#else /* ROM */
+
+/*------------------------------------------------------------------------*/
+
+#include  "oa1str.def"
+#include  "oa1sj.a65"
+#include  "oa1fs.def"
+
+#ifndef NOPRG
+          ;.word $800
+          *=PRGSTART
+          .word 0
+          .byt PK_PRG
+          .byt 8
+          .word 0
+          .word PRG
+          .byt <-1
+#else
+          .word PRGSTART
+          *=PRGSTART
+
+#endif /* NOPRG */
+
+#endif /* ROM */
+
+/*------------------------------------------------------------------------*/
+
+#ifndef NOMMU
+
+syszp     =$80
+sysmem    =$1000
+
+#endif
+
+#echo slip:
+#print sysmem
+#print syszp
+
+/**********************************************************************/
+
+PRG
+	rts
+
+        
+PRGEND    .)
+

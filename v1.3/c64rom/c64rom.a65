@@ -59,6 +59,9 @@
 #define	C64SWITCH	4	/* terminal switch key number (61= C=,
 				   4= F1) */
 
+#define	C64NMIRESET		/* restore button becomes reset 
+				   (doesn't work with NMIDEV) */
+
 /***************************************************************************/
 /* 			Better not change anything below                   */
 /*									   */ 

@@ -5,9 +5,9 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" xa
 
-all: rom ibmon mcopy c64 rmerr 
+all: rom ibmon mcopy c64 rmerr slip
 
-.OBJ.a65:
+.obj.a65:
 	(cd $%; ${XA} $%);
 	
 rom: 
@@ -36,6 +36,9 @@ fsdev:
 
 sh:
 	(cd oash; ${XA} sh.a65);
+
+slip: 
+	(cd oaslip; ${XA} slip.a65);
 
 rmerr:
 	rm -f *.lab *.err

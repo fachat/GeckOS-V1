@@ -170,5 +170,15 @@ Introduced return code for device interrupt routines. It is returned
 if an interrupt source has been cleared (E_OK) or not (E_NOIRQ).
 This is checked, and if a source has been removed, the interrupt 
 routine is left - if we cannot check the irq line directly with SYSINPORT.
-The C64 got a ACIA 6551 device, if it is built in to the C64.
+The C64 got a ACIA 6551 device, if it is built into the C64.
+
+******** OS/A 1.3.8 ******** 30jun1996 A.Fachat
+
+Added two routines (PUTB, GETB) to handle block transfers to Stream
+buffers. SBLK transfers a block of data (length in a) to (c=1) or from
+(c=0) a stream (xr) buffer to memory (address in zeropage address
+pointed to by yr).  The routine returns the number of actually
+transfered data in a (?). The data must not cross page (4k) boundaries
+on MMU systems.
+This procedure (hopefully) avoids a lot of context switches.
 

@@ -29,18 +29,9 @@
 #define   SYSPORT   $efe0
 #define   MMU       $eff0
 #define   BLKSIZ    $1000
+#define	  BLKLOG    12		   /* number of addressbits valid in one BLKSIZ */ 
 #define   SYSPAGE   $0             /* $12 zum testen, wenn System nicht startet  */
-/*
-#ifndef NOMMU
-#define   PRGSTART  $8000
-#else
-#ifdef C64
-#define   PRGSTART  $8000
-#else
-#define   PRGSTART  $c000
-#endif
-#endif
-*/
+
 
 #define   DVT_ADR   0
 #define   DVT_POS   2
