@@ -27,6 +27,55 @@
  *
  */
 
++tcp_chargen_loop .(
+cnt	=sysmem
+-sysmem	+=1
+	ldy #TCB_NTXBUF
+	lda (tcbp),y
+	bne end
+
+	lda #<TCP_DOFFSET+64
+	ldy #>TCP_DOFFSET+64
+	jsr balloc
+	bcc gotblock
+end	rts
+gotblock
+	stx tmp
+	sta qp
+	sty qp+1
+
+	ldy #TCP_DOFFSET
+l0	lda cnt
+	sta (qp),y
+	inc cnt
+	lda cnt
+	cmp #$20
+	bcc set
+	cmp #126
+	bcc ok
+set	lda #$20
+	sta cnt
+ok	iny
+	cpy #TCP_DOFFSET+64
+	bcc l0
+
+	ldy #0
+	lda #<TCP_DOFFSET
+	sta (qp),y
+	iny
+	lda #>TCP_DOFFSET
+	sta (qp),y
+	iny
+	lda #64
+	sta (qp),y
+	iny
+	lda #0
+	sta (qp),y
+
+	ldx tmp
+	jmp tx_queue_packet
+	.)
+
 +tcp_echo_queue .(
 	jmp tx_queue_packet
 #if 0

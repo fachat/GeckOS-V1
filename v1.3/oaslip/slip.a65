@@ -171,6 +171,11 @@ qlen	=sysmem+2
 qslot	=sysmem+4
 -sysmem	+=5
 
+owntask	=sysmem
+-sysmem	+=1
+
+	stx owntask
+
 	jsr binit
 	bcs exit
 DB("^m^jbinit ok^m^j")
@@ -513,11 +518,11 @@ even
 	beq discard	; zero length packet received
 ok
 
-#if 1 /*def DEBUGPKT*/
+#if 0 /*def DEBUGPKT*/
 	/* so what now? */
 DB("Received Packet: ip=")
 lda ip+1:jsr EHexout:lda ip:jsr EHexout: jsr ECrlfout
-#if 0
+#if 1
 	jsr printpacket
 
 DB("^m^jip=")
@@ -638,9 +643,7 @@ noicmp
 	bne notcp
 	jmp tcprx
 notcp
-jsr EHexout
 	DB("Packet discarded: unknown protocol^m^j")
-
 	jmp discard
 
 discardcs
@@ -654,7 +657,6 @@ discardip
 discardlen
 	DB("Packet discarded: length mismatch^m^j")
 	jmp discard
-
 	.)
 
 

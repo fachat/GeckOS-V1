@@ -189,11 +189,11 @@ lx	lda #0
 	dey
 	txa
 	sta (qp),y
-
+#if 0
 DB("sendip: qp=")
 lda qp+1: jsr EHexout: lda qp: jsr EHexout: jsr ECrlfout
 
-#if 0 /*def DEBUGSEND*/
+#if 1 /*def DEBUGSEND*/
 DB("^m^jSend packet:^m^j")
 jsr printpacket
 tsx
@@ -210,6 +210,7 @@ ldx qslot: jsr getblen: pha: tya: jsr EHexout: pla: jsr EHexout
 DB("] to len=")
 lda qlen+1: jsr EHexout: lda qlen: jsr EHexout
 jsr ECrlfout
+#endif
 #endif
 	ldx qslot
 	lda qlen

@@ -284,6 +284,7 @@ computer with bytes slows it down to near unusability.
 Been working on TCP implementation. discard & echo ports work. 
 Also connection closing ceremonies. Packet Retransmission works.
 Retransmission timeouts, timewait timeouts work.
+chargen port works. program registers itself as filesystem.
 
-TODO: active open, 32-bit-modulo, ...
+TODO: 32-bit-modulo, some timeouts...
 
