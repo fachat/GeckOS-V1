@@ -140,6 +140,6 @@ POT2      .byt 1,2,4,8,$10,$20,$40,$80
           .dsb $fffa-*-6,<-1
 #endif
           .byt D_D,D_M,D_Y,VA,VB,VC
-          .word NMI,RESET,IRQ
+          .word pnmi /*NMI*/,RESET,IRQ
 
 

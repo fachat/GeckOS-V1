@@ -539,15 +539,18 @@ pre5      adc #1:bne pre5
 #endif
           cld
 
-          jsr x
-          jmp yendirq
-x         jmp (nmiadr)
+;          jsr x
+;          jmp yendirq
+;x         
+	  jmp (nmiadr)
           
 nmiadr    =sysmem
 -sysmem   +=2
 
-&ininmi   lda #<zend
-          ldy #>zend
+&ininmi   ;lda #<zend
+          ;ldy #>zend
+	  lda #<yendirq
+	  ldy #>yendirq
 n1        sta nmiadr
           sty nmiadr+1
           clc
@@ -555,7 +558,16 @@ zend      rts
 
 +setnmi   jsr memsys
           bcc n2
+	  tax
+	  lda nmiadr
+	  pha
+	  lda nmiadr+1
+	  pha
+	  txa
           jsr n1
+	  pla
+	  tay
+	  pla
           bcc ne
 n2        jsr ininmi
 ne        jsr memtask
