@@ -111,7 +111,6 @@ gotslot
 	adc #0
 	sta slothlen,x
 
-DB("balloc(")
 #ifdef DEBUGMEM
 DB("^m^jalloc(")
 txa
@@ -174,7 +173,7 @@ found
 	   needed size. If the buffer is longer than needed, create a 
 	   new free buffer, then link new buffer to freelist */
 
-#if 1	/*def DEBUG*/
+#if 0	/*def DEBUG*/
 DB("Found Free buffer to alloc:")
 DB("p=")
 lda p+1:jsr EHexout:lda p:jsr EHexout
@@ -258,9 +257,9 @@ txa: jsr EHexout
 lda slothadr,x: jsr EHexout: lda slotladr,x: jsr EHexout
 lda slothlen,x: jsr EHexout: lda slotllen,x: jsr EHexout
 jsr ECrlfout
+jsr printmem
 plp
 #endif
-jsr printmem
 	lda slotladr,x
 	ldy slothadr,x
 	rts
@@ -268,6 +267,9 @@ jsr printmem
 
 /* free buffer (ID=xr) */
 &bfree	.( 
+;clc
+;rts
+&bfree2
 	cpx #MAXSLOT
 	bcc okfree
 	DB("bfree: illegal slot#^m^j")
@@ -280,7 +282,7 @@ okfree	lda slothadr,x
 	sec
 	rts
 okf1
-	DB("bfree(")
+/*	DB("bfree(")*/
 
 	lda slothadr,x
 	sta p3+1
@@ -408,7 +410,7 @@ jsr ECrlfout
 	ldy p3+1
 	sty flist+1
 	jsr bmerge
-#if 1	/*def DEBUGMEM*/
+#if 0	/*def DEBUGMEM*/
 jsr printmem
 #endif
 	clc
@@ -432,7 +434,7 @@ fok			; insert to list
 	lda p2
 	ldy p2+1
 	jsr bmerge
-#if 1	/*def DEBUGMEM*/
+#if 0	/*def DEBUGMEM*/
 jsr printmem
 #endif	
 	clc
@@ -442,7 +444,7 @@ jsr printmem
 /* split buffer xr at size a/y for first part. return new buffer ID in x */
 &bsplit	.(
 	stx slot
-#if 1 /*def DEBUGMEM*/
+#if 0 /*def DEBUGMEM*/
 pha
 tya
 pha
@@ -479,7 +481,7 @@ l0 	sty p2+1
 	bcc ok
 	bne oops
 
-DB("Btrunc to same size!^m^j")
+/*DB("Btrunc to same size!^m^j")*/
 	lda p3
 	sta slotrlln,x
 	lda p3+1
@@ -530,8 +532,8 @@ DB("^m^jsplit buffer @")
 	lda slotllen,x
 	jsr EHexout 
 	jsr ECrlfout
-#endif
 jsr printmem
+#endif
 	clc
 	rts
 	.)
@@ -540,7 +542,7 @@ jsr printmem
 &btrunc	.(
 	jsr bsplit
 	bcs oops
-	jmp bfree
+	jmp bfree2
 oops	rts
 	.)
 
@@ -623,7 +625,7 @@ nomerge
 	rts
 	.)
 
-#if 1 /*def DEBUGMEM*/
+#if 0 /*def DEBUGMEM*/
 &printmem .(
 pac	=sysmem
 pxr	=sysmem+1
@@ -634,7 +636,7 @@ pyr	=sysmem+2
 	stx pxr
 	sty pyr
 
-DB("^m^jMemory Free List:^m^j")
+/*DB("^m^jMemory Free List:^m^j")*/
 	lda flist
 	sta p
 	lda flist+1

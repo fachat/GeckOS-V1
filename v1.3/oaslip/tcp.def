@@ -41,6 +41,8 @@
 #define	THF_ACK		$10
 #define	THF_URG		$20
 
+#define	TCP_MAXTXB	4	/* length of retransmission buffer queue */
+
 /* transmission control block */
 #define	TCB_HDR		0	/* pseudo header struct (TCB_HDR must be 0) */
 #define	TCB_SRCIP	(TCB_HDR+TH_SRCIP)	/* SRCIP - TRGP are used to */
@@ -53,8 +55,12 @@
 #define	TCB_MAXSEG	28	/* two byte */
 #define	TCB_SERVICE	30	/* pointer to service struct */
 #define	TCB_STATE	32	/* state of connection */
+#define	TCB_LSTATE	33	/* last state of connection */
+#define	TCB_FLAG	34	/* 1 = FIN received */
+#define	TCB_NTXBUF	35	/* number of buffers in retranmission buffer */
+#define	TCB_TXBUF	36	/* retransmission buffer */
 
-#define	TCB_LEN		33
+#define	TCB_LEN		36+TCP_MAXTXB
 
 #define	TCPWIN		512	/* we have a receive window of this size */
 #define	TCPSEG		256	/* we send maximal TCPSEG sized segments */
@@ -65,6 +71,16 @@
 #define	SRV_RIP		0	
 #define	SRV_RPORT	4
 #define	SRV_LPORT	6
+#define	SRV_FLAG	8	/* service flags */
+#define	SRV_QUEUE	9	/* routine to queue packets for this service */
+				/* routine gets packet slot in x, tcbp & srv */
+#define	SRV_LEN		11
 
-#define	SRV_LEN		8
+/* service flags */
+#define	SFL_MULT	1	/* if set, immediately set up listening  */
+				/* service again on connect */
+
+/* error codes returned to the user */
+#define	E_NOCONN	<-1	/* illegal connection number */
+#define	E_CLOSING	<-2	/* connection already closing */
 
