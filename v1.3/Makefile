@@ -5,7 +5,7 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" xa
 
-all: rom ibmon mcopy c64 rmerr slip
+all: rom ibmon mcopy c64 slip rmerr 
 
 .obj.a65:
 	(cd $%; ${XA} $%);
