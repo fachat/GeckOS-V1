@@ -56,7 +56,7 @@
 
 /* One of these two _must_ be defined. They don't work together! */
 #undef	NO_FSTCP		/* if defined, do not use fstcp */
-#define	NO_WWW			/* if defined, do not use www server */
+#undef	NO_WWW			/* if defined, do not use www server */
 
 #define	MAXOQUEUE	4
 #define	INBUF		64
@@ -157,10 +157,16 @@ sysblk    =PRGSTART
 
 owntask	=sysmem
 -sysmem	+=1
+sendbuf	=sysmem	 ; !=0 when WWW server reads file -> filesystem doesn't listen
+-sysmem	+=1
+
 
 PRG	.(
 
 	stx owntask
+
+	lda #0
+	sta sendbuf
 
 	jsr binit
 	bcs exit
@@ -173,11 +179,6 @@ DB("oinit ")
 	jsr iinit
 	bcs exit
 DB("iinit ")
-/*
-	jsr icmpinit	; there is no need for it...
-	bcs exit
-DB("icmpinit ")
-*/
 	jsr tcpinit
 	bcs exit
 DB("tcpinit ")

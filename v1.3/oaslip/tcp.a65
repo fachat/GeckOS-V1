@@ -130,7 +130,7 @@ i1 	inx
 
 ;	ldx conn
 ;	jsr tcp_close	; TODO we should actually signal the user process...
-	lda #TE_FIN
+	lda #TE_SIG_FIN
 	jsr signal_user
 n1
 same	lda fl
@@ -157,9 +157,13 @@ same	lda fl
 	
 	ldy #TCB_STATE
 	lda (tcbp),y
+	cmp #TCP_FINW2
+	beq lastack
+	cmp #TCP_LASTACK
+	beq lastack
 	cmp #TCP_TIMEW
 	bne nomsl
-	;lda #TCP_CLOSED
+lastack	;lda #TCP_CLOSED
 	;sta (tcbp),y
 	jsr tclose
 	jmp noretrans
@@ -565,7 +569,7 @@ seqok	/* second, check the RST bit */
 	jsr tdisc
 	
 	/* signal_user may use q* variables! */
-	lda #TE_RESET0
+	lda #TE_SIG_RESET
 	jmp signal_user
 
 seq1	cmp #TCP_LASTACK
@@ -600,7 +604,7 @@ noreset	/* third, check security and precedence... */
 	;jmp signal_user
 	jmp tclose
 
-nosyn	/* fifth, check the ack bit */
+nosyn	/* fifth, check the ACK bit */
 	lda seg_flag
 	and #THF_ACK
 	bne ackok
@@ -610,7 +614,7 @@ nosyn	/* fifth, check the ack bit */
 ackok
 	jsr checkack
 	sta tmp
-/*DB("checkack returns "): lda tmp: jsr EHexout: jsr ECrlfout*/
+DB("checkack returns "): lda tmp: jsr EHexout: jsr ECrlfout
 
 	lda state
 	cmp #TCP_SYNRXD
@@ -646,16 +650,28 @@ jsr ECrlfout
 	jmp tdisc
 a0
 	jsr getuna
+	lda tmp
+	pha
 	jsr ackxmit
+	pla
+	sta tmp
 aignore
 	lda state
 	cmp #TCP_FINW1
-	bcc do6
+	bcc do6a
 	bne ack3
 
 	lda tmp
 	cmp #2		; exactly SND_NXT -> FIN ack'd
-	bne do6
+	bne do6a
+
+	ldy #TCB_MSL
+	lda #<TIME_FINW2
+	sta (tcbp),y
+	iny
+	lda #>TIME_FINW2
+	sta (tcbp),y
+
 	ldy #TCB_STATE
 	lda #TCP_FINW2
 	sta (tcbp),y
@@ -663,8 +679,8 @@ aignore
 
 ack3	cmp #TCP_FINW2
 	bne ack4
-	/* TODO: ack user close */
-	jmp do6
+
+do6a	jmp do6
 
 ack4	cmp #TCP_CLOSING
 	bne ack5
@@ -688,6 +704,8 @@ atw	jmp tdisc
 
 ack5	cmp #TCP_LASTACK
 	bne ack6
+
+	DB("LAST ACK received^m^j")
 	
 	lda tmp
 	cmp #2
@@ -752,32 +770,35 @@ idat
 	cmp #TCP_SYNTXD
 	beq nofin
 
+	tax
+
 	lda seg_flag
 	and #THF_FIN
 	beq nofin
-#if 0			/* when changing to CLOSEW, user is signaled in loop */
-	lda phl
-	pha
-	lda pslot
-	pha
 
-	lda #TE_CLOSING
-	jsr signal_user
+	cpx #TCP_FINW2
+	bne nofinw2
 
-	pla
-	tax
-	pla
-	jsr getpinfo	; restores everything except dlen, discd, doffset
-	bcc piok
-	DB("getpi error in tcp_else^m^j")
-	rts
-piok
-#endif
+	inc needack
+
+	ldy #TCB_STATE
+	lda #TCP_TIMEW
+	sta state
+	sta (tcbp),y
+
+	ldy #TCB_MSL
+	lda #<TIME_MSL
+	sta (tcbp),y
+	iny
+	lda #>TIME_MSL
+	sta (tcbp),y
+	jmp nofin
+nofinw2
 	lda #1
 	ldx #0
 	jsr addrxnxt
 
-	inc needack
+	;inc needack		; bangbuf does it already
 
 	jsr setack
 	jsr setseq
@@ -1492,6 +1513,7 @@ l1	lda (tcbp),y
 	.(
 		/* TODO: set queued FIN until everything is really ok */
 	sta tmp
+
 	lda #<TH_OPTIONS+TCP_OFFSET
 	ldy #>TH_OPTIONS+TCP_OFFSET
 	jsr balloc
@@ -1519,12 +1541,15 @@ lda pslot:jsr EHexout:jsr ECrlfout
 	and #THF_FIN+THF_SYN
 	beq nofin
 
-DB("send FIN or SYN: tcbp=")
+DB("send FIN/SYN: tcbp=")
 lda tcbp+1:jsr EHexout:lda tcbp:jsr EHexout:DB(", sndnxt=")
 ldy #TCB_SND_NXT:ldx #4:x2 lda (tcbp),y:jsr EHexout:iny:dex:bne x2
 DB(" ret=")
 tsx:lda $102,x:jsr EHexout:lda $101,x:jsr EHexout
 jsr ECrlfout
+	
+	ldx pslot
+	jsr do_queue	; everthing adding to snd_nxt should be queued!
 
 	lda #1
 	ldx #0
@@ -1539,7 +1564,7 @@ nofin
 
 &tclose	.(
 	/* ok, clean up connection specific stuff */
-	lda #TE_CLEANUP
+	lda #TE_SIG_TERM
 	jsr signal_user
 
 	ldy #TCB_STATE

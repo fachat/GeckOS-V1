@@ -447,10 +447,12 @@ l0c	jmp l0
  * process requests from filesystem interface 
  */
 rxloop	.(
+	lda sendbuf	; test WWW server interference
+	bne norx
 	clc
 	jsr RECEIVE
 	bcc ok
-	rts
+norx	rts
 ok
 	stx task
 	sty len
@@ -787,8 +789,9 @@ fstcp_signal .(
 	DB("fstcp_signal: ")
 	lda signal: jsr EHexout
 	jsr ECrlfout
+	lda signal
 #endif
-	jsr tcp_sig_close
+	jsr tcp_signal
 
 	ldx #0
 	stx fd

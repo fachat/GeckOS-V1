@@ -312,7 +312,21 @@ FSTCP can now be disabled in main.a65.
 
 hacked a small (and dirty) WWW server...
 
-******** OS/A 1.3.13c ******** 14mar1997 A.Fachat
+******** OS/A 1.3.13d ******** 14mar1997 A.Fachat
 
-Bug fixes...
+Bug fixes...: 
+- It is now possible to run the WWW server together with the
+  FSTCP filesystem at the same time - it is _not_ allowed to let the 
+  WWW server access a file on the FSTCP filesystem - it hangs the SLIP
+  process!
+- The problem with the aborts is gone: I forgot to release the STREAMS
+  in the WWW server
+- the transition from LASTACK to CLOSED wasn't detected, because ackxmit
+  overwrote the "tmp" variable that holds the checkack return value...
+- LASTACK now also has a timeout to close the TCB after a while
+- FINW2 was not resolved to TIMEW because there was no check...
+  so the available number of TCBs decreased...
+- FINW2 now also has a timeout to closed, as when the FIN is ack'd, we
+  cannot resend it (removed from queue...). This is probably not as it should
+  be, but it works anyway.
 
