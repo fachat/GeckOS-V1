@@ -272,4 +272,8 @@ The same bug as in the fast serial driver was in the UART driver, which
 now works at 19200 baud, only very occasionally loosing characters.
 Also some more handshake bugs in these drivers have been fixed.
 
+******** OS/A 1.3.10 ******** 25oct1996 A.Fachat
+
+Added CTRLNMI system call, together with the NMI chain. There is still 
+a way missing to remove a driver from the chain.
 

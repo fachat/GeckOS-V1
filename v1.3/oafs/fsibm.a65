@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -4446,6 +4446,11 @@ wl1       dex
 
 wcmd      .(
           pha
+#ifdef NMIDEV
+	lda #NMI_OFF
+	jsr CTRLNMI
+#endif
+	sei
           jsr wloop
           pla
           sta WD1+WD_CMD
@@ -4464,7 +4469,7 @@ setstep   .(
           and #3
           ora divers
           php
-          sei
+          ;sei
           jsr wcmd
           ldx #128
 wc2       jsr setti
@@ -4640,7 +4645,7 @@ q         ldx #40        ; bis 5.25" auf Drehzahl nach Density-Wechsel
 qloop     ldx #16         ; 8*32ms=256ms <> 1 umdrehung bei 234 upm
           lda #%11000000 ; Read Adress
           ldy #5
-          sei
+          ;sei
           jsr wcmd
 q1        jsr setti
           lda #%00100000
@@ -4662,8 +4667,12 @@ q2        bit VIA2+VIA_IFR
           lda POT2-1,x   ; dann Anzahl 256-Byte-Blocks im Sektor
           ldx actdrv
           sta blen,x
-          lda data+5
           cli
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
+          lda data+5
           clc
           rts
 
@@ -4674,6 +4683,10 @@ qn        lda WD1+WD_ST
 q3        dec errcnt
           bne qloop
           cli
+#ifdef NMIDEV
+	lda #NMI_ON
+	jsr CTRLNMI
+#endif
           dec divers
           beq qe
           
@@ -4796,7 +4809,7 @@ read      .(
           sta errcnt
 rdloop    lda sect
           sta WD1+WD_SECT
-          sei
+          ;sei
           ldx data       ; Anzahl 256-Byte-Bl”cke
           ldy #0
           lda #%10001000
@@ -4815,14 +4828,24 @@ rd1       bit VIA2+VIA_DRA
           clc
           ldx WD1+WD_ST
           ldy errcnt  
-          cli
-          rts
+          ;cli
+          ;rts
+	  bcc rdee	; always
 rde       dec errcnt
           bne rdloop
           lda #E_RD
           sec
           ldx WD1+WD_ST
+rdee
           cli
+#ifdef NMIDEV
+	php
+	pha
+	lda #NMI_ON
+	jsr CTRLNMI
+	pla
+	plp
+#endif
           rts
           .)
 
@@ -4840,7 +4863,7 @@ write     .(
           sta errcnt
 wrloop    lda sect
           sta WD1+WD_SECT
-          sei
+          ;sei
           ldx data       ; Anzahl 256-Byte-Bl”cke
           ldy #0
           lda #%10101000
@@ -4858,14 +4881,23 @@ rd1       bit VIA2+VIA_DRA
           bne rd1
           clc
           lda WD1+WD_ST
-          cli
-          rts
+          ;cli
+          ;rts
+	  bcc rdee	; always
 rde       dec errcnt
           bne wrloop
           lda #E_WR
           sec
           ldx WD1+WD_ST
-          cli
+rdee      cli
+#ifdef NMIDEV
+	php
+	pha
+	lda #NMI_ON
+	jsr CTRLNMI
+	pla
+	plp
+#endif
           rts
           .)
 
@@ -4882,7 +4914,7 @@ errloop   ldy #0
           iny
           sty sect
           jsr forcend
-          sei
+          ;sei
           lda #%11110100
           jsr wcmd
           lda WD1+WD_ST  ; intrq loeschen
@@ -5012,11 +5044,24 @@ fe        dec errcnt
 fee       sec
           lda #E_FT
           ldx WD1+WD_ST
+	.byt $24
+fr	sec
+	cli
+#ifdef NMIDEV
+	php
+	pha
+	lda #NMI_ON
+	jsr CTRLNMI
+	pla
+	plp
+#endif
+/*
           cli
           rts
 fr        cli
           clc
           rts
+*/
           .)
           .)
 

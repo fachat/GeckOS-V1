@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -65,7 +65,8 @@ outstr    =sysmem+4
 smode	  =sysmem+5
 inp	  =sysmem+6
 outp	  =sysmem+7
--sysmem   +=8
+nmistate  =sysmem+8
+-sysmem   +=9
 rmode	  =syszp
 oldnmi	  =syszp+1
 -syszp	  +=3
@@ -276,6 +277,25 @@ endirq	pla
 
 /*****************************************************************/
 
+ctrlnmi	.(
+	sta nmistate
+	cmp #NMI_ON
+	bne off
+	lda status
+	and #%11011111
+	bne norts
+	jsr rtslo
+norts
+	jmp ennmi
+off
+	jsr rtshi
+	jsr disnmi
+	rts
+	.)
+
+	; structure before NMI routine as required by SETNMI
+	.word oldnmi
+	.word ctrlnmi
 NMIserial .(
 	pha
 	cld
@@ -306,9 +326,7 @@ databyte
 	tax
 	pla
 	bit C64CIA2+CIA_ICR
-	rti
-
-	;jmp (oldnmi)
+	jmp (oldnmi)
 
 startbit	
 	dec rmode		; $80 -> $7f
@@ -320,8 +338,8 @@ startbit
 	sta C64CIA2+CIA_ICR	; enable SR NMI
 	pla
 	bit C64CIA2+CIA_ICR
-	rti
-	;jmp (oldnmi)
+	jmp (oldnmi)
+
 	.)
 
 nmion	.(
@@ -343,19 +361,29 @@ nmion	.(
 	lda #%00010010
 	sta C64CIA2+CIA_CRB	; Timer B force load, stop, pulse PB7
 
-	lda C64CIA2+CIA_ICR	; clear NMI
 
+	lda nmistate
+	cmp #NMI_ON
+	bne onx
+&ennmi
+	lda C64CIA2+CIA_ICR	; clear NMI
 	lda #%10011000		; enable IRQ for Flag2
 	sta C64CIA2+CIA_ICR
+onx
+	rts
+	.)
 
+disnmi	.(
+	lda #%00011000
+	bit rmode
+	bpl disnmi		; wait for char received
+	sta C64CIA2+CIA_ICR
+	lda C64CIA2+CIA_ICR
 	rts
 	.)
 
 nmioff	.(
-	lda #%00011000
-	sta C64CIA2+CIA_ICR
-	lda C64CIA2+CIA_ICR
-
+	jsr disnmi
 	clc			; TODO - enable other NMI routines
 	jsr SETNMI
 	rts
@@ -371,15 +399,23 @@ rtshi
 	lda C64CIA2+CIA_PRB
 	and #%11111101
 	sta C64CIA2+CIA_PRB
+	lda nmistate
+	cmp #NMI_ON
+	bne noy
 	lda status
 	ora #%00100000
 	sta status
+noy
 	rts
 
 rtslo
+	lda nmistate
+	cmp #NMI_OFF
+	beq nox
 	lda C64CIA2+CIA_PRB
 	ora #%00000010
 	sta C64CIA2+CIA_PRB
+nox
 	lda status
 	and #%11011111
 	sta status

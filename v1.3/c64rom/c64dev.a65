@@ -1,7 +1,7 @@
 
 /****************************************************************************
    
-    OS/A65 Version 1.3.9
+    OS/A65 Version 1.3.10
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -76,17 +76,14 @@
 
 devstart
 
-/*#include  "c:eigene\eigene.a65\osarom3\oadev\oa1dt.a65"*/
-/*#include  c64dt.a65"*/
 #include  "oadev/oa1dt.a65"	; video device is merged with OS/A now...
-/*#include  "oadev\oa1dct.a65"*/
 #include  "oadev\oa1dnl.a65"
 #include  "oadev\oa1dsp.a65"
-/*#include  "c64ds.a65"*/
-#include  "c64ds3.a65"
+/*#include  "c64ds.a65"*/	; my (old, now replaced) ACIA 6551 interface
+#include  "c64ds3.a65"		; fast serial interface by Daniel Dallmann
 
 #ifdef UARTBASE
-#include  "c64ds2.a65"
+#include  "oadev/oa1ds2.a65"	; standard UART 16550A driver
 #endif
           .word $ffff
 

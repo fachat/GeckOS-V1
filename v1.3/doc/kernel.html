@@ -274,17 +274,52 @@ $f06c	XRECEIVE receives a message from a specified task only. parameter as
 
 $f06f	SETNMI	in systems without MMU, set the system NMI routine address.
 		(carry=1): set the new NMI routine address (in a/y)
+			   returns the old NMI address in a/y.
 		(carry=0): clear NMI routine.
-		The NMI routine has to be left with RTS opcode!
+		The NMI routine has to save all registers by itself!
+
+		At NMI address -2 there must be the address of a ctrl routine
+		that can be called via CTRLNMI. Expect that the 
+		ctrlnmi routine is called during this SETNMI  with either
+		NMI_ON of NMI_OFF in AC, to set the initial state.
+		The ctrlnmi routines is called with JSR, i.e. return with RTS.
+
+		At NMI address -4 is a pointer to a memory location
+		where the address of the next NMI routine can be found.
+		If the address found there is $ffff, then the list is at
+		its end.
+
+		A possible scenario then is:
+
+		Task calls SETNMI with NEWNMI in a/y. SETNMI returns OLDNMI
+		in a/y and task saves that in oldvec. We then have the 
+		structure:
+
+		(NEWNMI-4)	address of oldvec -->   address of OLDNMI
+		(NEWNMI-2)	address of nmictrl			
+		NEWNMI -->  	NMI routine code
+
+		This way the structure can be held in ROM, and still allow
+		flexible NMI chaining. If CTRLNMI is called, each of the 
+		nmictrl routines is called with the given value in AC.
+
+$f072	CTRLNMI	Send command in AC to all currently chained NMI ctrl 
+		routines as described with SETNMI. Possible values are:
+
+		NMI_ON  = allow NMIs 
+		NMI_OFF = disallow NMIs
+
+		This routine is called when initiating and ending an
+		IEC serial bus transfer, for example.
 
 -------------------------------------------
 
-$f072	PUTB	sends a block of data (address in zeropage, pointed to by
+$f075	PUTB	sends a block of data (address in zeropage, pointed to by
 		yr, length in ac) to stream x
 	 	returns number of transfered bytes in ac (c=0) or error (c=1)
 		doesn't block, returns 0 instead
 
-$f075	GETB	reads a block of data (address in zeropage, pointed to by
+$f078	GETB	reads a block of data (address in zeropage, pointed to by
 		yr, maximum length in ac) from stream x
 		returns number of transfered bytes in ac (c=0) or error (c=1)
 		doesn't block, returns 0 instead
