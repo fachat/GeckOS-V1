@@ -1,0 +1,70 @@
+
+#define	MAXCONN		8
+
+/* TCP connection states */
+#define	TCP_CLOSED	0
+#define	TCP_LISTEN	1
+#define	TCP_SYNRXD	2
+#define	TCP_SYNTXD	3
+#define	TCP_ESTAB	4
+#define	TCP_FINW1	5
+#define	TCP_FINW2	6
+#define	TCP_CLOSEW	7
+#define	TCP_LASTACK	8
+#define	TCP_CLOSING	9
+#define	TCP_TIMEW	10
+
+/* TCP header, including pseudo header */
+#define	TH_SRCIP	0	/**/
+#define	TH_TRGIP	4
+#define	TH_PTCL		9
+#define	TH_TCPLEN	10
+#define	TH_SRCP		12	/* source port */
+#define	TH_TRGP		14	/* target port */
+#define	TH_SEQ		16
+#define	TH_ACK		20
+#define	TH_DOFFSET	24
+#define	TH_FLAG		25
+#define	TH_WINDOW	26
+#define	TH_CHECK	28
+#define	TH_URGENT	30
+#define	TH_OPTIONS	32
+
+/* TCP pseudo header length */
+#define	TPH_LEN		12
+
+/* TCP flag values */
+#define	THF_FIN		$01
+#define	THF_SYN		$02
+#define	THF_RST		$04
+#define	THF_PSH		$08
+#define	THF_ACK		$10
+#define	THF_URG		$20
+
+/* transmission control block */
+#define	TCB_HDR		0	/* pseudo header struct (TCB_HDR must be 0) */
+#define	TCB_SRCIP	(TCB_HDR+TH_SRCIP)	/* SRCIP - TRGP are used to */
+#define	TCB_TRGIP	(TCB_HDR+TH_TRGIP)	/* ident connection (hi-lo!)*/
+#define	TCB_SRCP	(TCB_HDR+TH_SRCP)
+#define	TCB_TRGP	(TCB_HDR+TH_TRGP)
+#define	TCB_RCV_NXT	(TCB_HDR+TH_SEQ)	/* needed to compare */	
+#define	TCB_SND_UNA	(TCB_HDR+TH_ACK)	/*        ...        */
+#define	TCB_SND_NXT	24	/* high-low format! */
+#define	TCB_MAXSEG	28	/* two byte */
+#define	TCB_SERVICE	30	/* pointer to service struct */
+#define	TCB_STATE	32	/* state of connection */
+
+#define	TCB_LEN		33
+
+#define	TCPWIN		512	/* we have a receive window of this size */
+#define	TCPSEG		256	/* we send maximal TCPSEG sized segments */
+
+#define	TCP_OFFSET	8	/* offset from IP hdr start to TCP pseudo hdr */
+
+/* service struct */
+#define	SRV_RIP		0	
+#define	SRV_RPORT	4
+#define	SRV_LPORT	6
+
+#define	SRV_LEN		8
+

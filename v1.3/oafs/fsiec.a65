@@ -350,7 +350,7 @@ l2a       inc anz
           bne l3
 
 ol
-#if 1	/*ndef OLDROM*/
+#if 0	/*ndef OLDROM*/
 b2zei 	=syszp
 -syszp  +=2
 	  ldy #F_LEN
@@ -434,7 +434,7 @@ l5n       cmp #E_NUL
 l3        cmp #F_MODE_WR
           bne l8
 il          
-#if 1 	/*ndef OLDROM*/
+#if 0 	/*ndef OLDROM*/
 	  lda #BUFSIZE
 	  sec
 	  ldy #F_BYT
@@ -855,8 +855,10 @@ xx2       tya
           ldx #<(PCBUF+FS_OPEN_NAME-2)
           jsr SETFNPAR
           jsr IECOPEN
+/*.( :bcc lll1: inc $d021: lll1 .)*/
 rxe2a     bcs rxe2b
           jsr DISKST
+/*.( :bcc lll1: inc $d020: lll1 .)*/
           bcs rxe2a
 #ifdef NMIDEV
 	lda #NMI_OFF
@@ -1055,13 +1057,15 @@ sfn1      lda div
           lda #","
           sta PCBUF+FS_OPEN_NAME,y
           iny
-          lda #"p"
+;          lda #"p"
+lda #"P"
           sta PCBUF+FS_OPEN_NAME,y
           iny
 sfn3      lda #","
           sta PCBUF+FS_OPEN_NAME,y
           iny
           pla
+eor #$20
           sta PCBUF+FS_OPEN_NAME,y
           iny
 	  ldx #<PCBUF+FS_OPEN_NAME
@@ -1277,17 +1281,17 @@ lx1       lda status
           .byt $24
 lx        sec
           php
-;tya
-;pha 
-;ldy #0    
-;lxxx0
-;jsr IECIN
+tya
+pha 
+ldy #0    
+lxxx0
+jsr IECIN
 ;sta $e000,y
-;iny
-;lda status
-;beq lxxx0
-;pla
-;tay 
+iny
+lda status
+beq lxxx0
+pla
+tay 
           jsr UNTALK
 #ifdef NMIDEV
 	lda #NMI_ON
@@ -3874,6 +3878,7 @@ inix      sec
 &LISTEN   lda devadr
           ora #$20
 aout      
+	sei
 	  pha
 	  jsr iecsetoutput
           lda #0
