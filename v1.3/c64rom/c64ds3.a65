@@ -37,7 +37,7 @@
  * is full. 
  * This procedure slows down sending, but enables us to receive at 
  * 9600 baud. It has to be guaranteed that the NMI routine is done
- * within a bit's time at 9600 baud.
+ * within a bit's time (i.e. about 100 CPU cycles @ 1MHz) at 9600 baud.
  *
  * Only 9600 Baud are supported now. Timer values etc are taken from
  * the miniterm program by Daniel Dallmann
@@ -63,10 +63,14 @@ status    =sysmem+2
 instr     =sysmem+3
 outstr    =sysmem+4
 smode	  =sysmem+5
-rmode	  =sysmem+6
--sysmem   +=7
--sysblk	  -=256
+inp	  =sysmem+6
+outp	  =sysmem+7
+-sysmem   +=8
+rmode	  =syszp
+-syszp	  +=1
+-sysblk	  -=512
 bytetab	  =sysblk
+inbuf	  =sysblk+256
 
 prg1      ldx #0
 
@@ -93,9 +97,13 @@ devini    lda #0
           sta instr
           sta outstr
 
-	sta rmode		; receiving mode
 	lda #$80
 	sta smode		; sending mode
+	sta rmode		; receiving <0 = wait stop bit; >0 = wait SR
+
+	lda #0
+	sta inp
+	sta outp
 
 	; generate bit reversed data field
 	ldx #0
@@ -123,20 +131,39 @@ l0	lsr
 	sta C64CIA1+CIA_TAL
 	lda #>50
 	sta C64CIA1+CIA_TAH
+
+	lda #$df
+	sta C64CIA1+CIA_SDR	; send byte $ff
+	lda #$ff
+	sta C64CIA1+CIA_SDR	; 
+
 	lda #%01010001		; start timer A, force load, cont mode, SR out
 	sta C64CIA1+CIA_CRA
 
 	lda C64CIA1+CIA_ICR		; clear actual irqs
 
+	; program CIA2 for receiving
+	lda #%01111111
+	sta C64CIA2+CIA_ICR	; disable all NMI
+	lda C64CIA2+CIA_CRA
+	and #%10111111
+	sta C64CIA2+CIA_CRA	; set SDR for input
+
+	; program CIA2 for I/O
+	lda #%10000110
+	sta C64CIA2+CIA_PRB
+	lda C64CIA2+CIA_DDRB
+	and #%10000110
+	ora #%10000110
+	sta C64CIA2+CIA_DDRB
 	plp
+
           clc
           rts
 
 /*****************************************************************/
 
-devirq    
-        .(
-
+devirq  .(
 	lda C64CIA1+CIA_ICR
 	bpl noirq
 	and #%00001000
@@ -154,13 +181,13 @@ noirq	lda #E_NOIRQ
 
 	; try to send something
 	lda smode
-	bpl endirq
+	bpl endtx
 
 	bit status
-	bvc endirq		; we don't send
+	bvc endtx		; we don't send
 
 	bit C64CIA2+CIA_PRB
-	bvc endirq		; CTS hi
+	bvc endtx		; CTS hi
 
         ldx instr		; send new data byte
         jsr GETC
@@ -176,53 +203,140 @@ noirq	lda #E_NOIRQ
 
 	lda #0
 	sta smode
-	beq endirq
+	beq endtx
 
 test2   cmp #E_EOF
-        bne endirq
+        bne endtx
         jsr txoff
+
+endtx				; now let's see if there's something
+	ldx outp
+	cpx inp
+	beq endirq
+
+	lda inbuf,x
+	ldx outstr
+	jsr PUTC
+	bcs test
+
+	inc outp
+
+nobyt   ldx outstr
+        lda #SC_STAT
+        jsr STRCMD
+test    bcc devirq
+        cmp #E_NUL
+        bne tstwater
+        jsr rxoff
+	jmp endirq
+tstwater  
+	cmp #E_SEMPTY
+        beq wl
+        tax
+        lda status
+        and #1
+        bne wh
+        txa
+        cmp #E_SFULL
+        bne nofull
+	jsr rtshi
+	jmp endirq
+nofull
+        cmp #E_SHWM
+        bne twl
+wh      ldx #0  
+	jsr rtshi
+	jmp rx2end
+twl     cmp #E_SLWM
+        bne rx2end
+wl      ldx #0  
+	jsr rtslo
+
+rx2end	jmp endtx
 
 endirq	pla
 	lda #E_NOIRQ
 	rts
 
-;rx2	.(
-;        ldx outstr
-;        jsr PUTC
-;        bcs test
-;
-;	lda UART+UART_RXTX
-;
-;nobyt   ldx outstr
-;        lda #SC_STAT
-;        jsr STRCMD
-;test    bcc devirq
-;        cmp #E_NUL
-;        bne tstwater
-;        jmp rxoff
-;tstwater  
-;	cmp #E_SEMPTY
-;        beq wl
-;        tax
-;        lda status
-;        and #1
-;        bne wh
-;        txa
-;        cmp #E_SFULL
-;        beq wh
-;        cmp #E_SHWM
-;        bne twl
-;wh      ldx #0  
-;	jmp rtshi
-;twl     cmp #E_SLWM
-;        bne rx2end
-;wl      ldx #0  
-;	jmp rtslo
-;rx2end	rts
-;	.)
-;
-
         .)
+
+/*****************************************************************/
+
+NMIserial .(
+	bit rmode
+	bmi startbit
+databyte
+	ldx #%00000010
+	stx C64CIA2+CIA_CRB	; stop timer - this is most important
+	inc rmode		; $7f -> $80
+	ldx #%00001000
+	stx C64CIA2+CIA_ICR	; disable SDR NMI
+	ldx #%10010000
+	stx C64CIA2+CIA_ICR	; enable Flag2 NMI
+	ldx C64CIA2+CIA_ICR
+		; this must be done in 100 CPU cycles (stop bit) 
+	lda C64CIA2+CIA_SDR
+
+	tax
+	lda bytetab,x
+	ldx inp
+	sta inbuf,x
+	inc inp
+	rts
+
+startbit	
+	dec rmode		; $80 -> $7f
+	lda #%00010000
+	sta C64CIA2+CIA_ICR	; disable Flag2 NMI
+	lda #%10001000
+	sta C64CIA2+CIA_ICR	; enable SDR NMI
+	lda #40
+	sta C64CIA2+CIA_TBL
+	lda #%00010010		; force load
+	sta C64CIA2+CIA_CRB	; start timer
+	lda #100
+	sta C64CIA2+CIA_TBL
+	lda #%00000011
+	sta C64CIA2+CIA_CRB	; start timer
+	lda C64CIA2+CIA_ICR
+		; this must be done in 100 CPU cycles
+	rts
+	.)
+
+nmion	.(
+	lda #$80
+	sta rmode
+
+	sec
+	lda #<NMIserial
+	ldy #>NMIserial
+	jsr SETNMI
+
+	lda #<100
+	sta C64CIA2+CIA_TBL
+	lda #>100
+	sta C64CIA2+CIA_TBH
+
+	lda #%00010010
+	sta C64CIA2+CIA_CRB	; Timer B force load, stop, pulse PB7
+
+	lda C64CIA2+CIA_ICR	; clear NMI
+
+	lda #%10010000		; enable IRQ for Flag2
+	sta C64CIA2+CIA_ICR
+
+	rts
+	.)
+
+nmioff	.(
+	lda #%00011000
+	sta C64CIA2+CIA_ICR
+	lda C64CIA2+CIA_ICR
+
+	clc
+	jsr SETNMI
+	rts
+	.)
 
 /*****************************************************************/
 
@@ -269,6 +383,7 @@ o1        cmp #DC_PS		; set stream to put data to
 okx       jmp ok
 o2        cmp #DC_RX_ON		; switch receiver on
           bne o3
+	jsr nmion
 	jsr rtslo
 	jsr dtrlo
           lda #DC_SW_RX
@@ -287,6 +402,7 @@ rxoff     ldx dev
           and #DC_SW_RX
           beq devoffx
 	jsr rtshi
+	jsr nmioff
           lda outstr
           tax
           lda #SC_EOF

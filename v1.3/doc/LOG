@@ -241,4 +241,8 @@ refer to 1.3.9b
 Serial device driver for the fast (i.e. 9600 baud) RS232 interface by
 Daniel Dallmann started. Transmitting works.
 
+******** OS/A 1.3.9e ******** 22oct1996 A.Fachat
+
+Now receiving at slow byterate (though 9600 baud) works. Too many bytes
+(i.e. NMIs) in a short time kill the machine... 
 
