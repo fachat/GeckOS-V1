@@ -200,4 +200,11 @@ root:/root>
 Well, there still is a lot to do:
 - problems with lost characters
 - memory management buggy
+- removing DEBUG output (gets down to 1.6ms for a ping reply)
+
+******** OS/A 1.3.8e ******** 16oct1996 A.Fachat
+
+Ironed out some bugs in SLIP memory handling, which seems stable now.
+SLIP behaves strange when packet buffer is _not_ empty (i.e. filled
+with zero)
 
