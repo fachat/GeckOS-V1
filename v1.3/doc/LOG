@@ -236,4 +236,9 @@ I managed to get my selfbuilt hardware running again! So the current
 stdrom is checked with MMU. OLDROM will from the next version on
 refer to 1.3.9b
 
+******** OS/A 1.3.9d ******** 21oct1996 A.Fachat
+
+Serial device driver for the fast (i.e. 9600 baud) RS232 interface by
+Daniel Dallmann started. Transmitting works.
+
 

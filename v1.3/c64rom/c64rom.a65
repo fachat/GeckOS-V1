@@ -34,7 +34,7 @@
 
 #define   NOMMU   
 #define   NOSYSPORT
-#undef 	  CLK2MHZ
+#undef 	  CLK2MHZ		/* we only have approx. 1 MHz */
 #define	  VIDPAGE 14
 #define	  SHORTLINE		/* prepare for 40 col screen */
 
@@ -51,10 +51,14 @@
 				   tasks with */
 
 /*#define NMIDEV*/
+				
 /*#define C64NEEDCIA1*/		/* disables reading CIA1 ICR in kernel -
 				   needs to be done in device then, as
 				   kernel enables timer irq!! (reading 
-				   it causes all flags to be reset!) */
+				   it causes all flags to be reset!) 
+				   If you use the plain C64 9600 baud RS232
+				   interface (ds3), this has to be defined! */
+		
 #define PARALLEL		/* for IEEE488 interface from Commodore 
 				   disables serial bus interface! */
 
@@ -65,8 +69,9 @@
 #define	C64SWITCH	4	/* terminal switch key number (61= C=,
 				   4= F1) */
 
-#define	C64NMIRESET		/* restore button becomes reset 
-				   (doesn't work with NMIDEV) */
+/*#define	C64NMIRESET*/	/* restore button becomes reset 
+				   (doesn't work with NMIDEV and the
+				   plain C64 9600 baud RS232 interface) */
 
 /***************************************************************************/
 /* 			Better not change anything below                   */
@@ -80,7 +85,7 @@
 #ifdef STACKCOPY
 syszp     =$20		/* allocated upward, below is for kernel */
 sysmem    =$1000	/* allocated upward, $300-$1000 is for kernel */
-sysblk    =$1800	/* allocated downward */
+sysblk    =$2000	/* allocated downward */
 #else
 sysmem    =$800		/* allocated upward, $300-$800 is for kernel */
 syszp     =$20		/* allocated upward, below is for kernel */
