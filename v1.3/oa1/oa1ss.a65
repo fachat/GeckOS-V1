@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.8
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -37,7 +37,12 @@
           .(
 
 SZEI      =syszp
--syszp    +=2
+#ifdef OLDROM
+-syszp	  +=2
+#else
+BZEI	  =syszp+2
+-syszp    +=4
+#endif
           
 #ifdef NOMMU
 SYR       =sysmem
@@ -54,6 +59,196 @@ STRM      =syszp+2
 -sysblk   -=ANZSTRM<<7   ; *128    
 
 blocks    =sysblk
+
+#ifndef OLDROM
+	  .(
+&&getb    .(
+          php
+          sei
+          jsr memsys
+          jsr teststd
+
+          sty SYR
+          sta SAC
+
+          jsr setstream
+          bcs putnostr3
+          lda STRM+S_CNTR,x
+          beq snul3            ; NUL-Status dann ende
+
+	  lda STRM+S_II,x
+	  cmp STRM+S_IO,x
+	  beq empty3
+
+#ifndef NOMMU
+	  lda #0
+	  jsr setmmu1
+	  ldy SYR
+	  lda BLKSIZ,y
+	  sec
+	  sbc STRM+S_IO,x
+	  sta BZEI
+	  php
+	  lda BLKSIZ+1,y
+	  sta BZEI+1
+	  lsr
+	  lsr
+	  lsr
+	  lsr
+	  jsr setmmu1
+	  lda BZEI+1
+	  and #$0f
+	  ora #$01
+	  plp
+	  sbc #0
+	  sta BZEI+1
+#else
+	  ldy SYR
+	  sec
+	  lda 0,y
+	  sbc STRM+S_IO,x
+	  sta BZEI
+	  lda 1,y
+	  sbc #0
+	  sta BZEI+1
+#endif
+	  lda SAC
+	  sta SYR
+
+          ldy STRM+S_IO,x
+l0
+	  lda (SZEI),y
+	  sta (BZEI),y
+	  iny
+	  tya
+	  bpl l1		; this heavily depends on Streamsize = 128!!
+	  clc
+	  adc BZEI
+	  sta BZEI
+	  lda #0
+	  bcc l1
+	  inc BZEI+1	  
+l1	  tay
+	  cmp STRM+S_II,x
+	  beq end
+l2 	  dec SYR
+	  bne l0
+end
+	  tya
+	  sta STRM+S_IO,x
+	  lda SAC
+	  sec
+	  sbc SYR
+	  clc
+
+          jsr memtask
+          plp
+          clc
+          rts
+          .)
+
+snul3     lda #E_NUL
+          .byt $2c
+putnostr3 lda #E_NOSTR
+          .byt $2c
+full3     lda #E_SFULL
+          .byt $2c
+empty3    lda #E_SEMPTY
+          jmp xerr
+
+&&putb    .(
+          php
+          sei
+          jsr memsys
+          jsr teststd
+
+          sty SYR
+          sta SAC
+
+          jsr setstream
+          bcs putnostr3
+          lda STRM+S_CNTR,x
+          beq snul3            ; NUL-Status dann ende
+
+	  ldy STRM+S_II,x
+	  iny
+	  tya
+	  and #$7f
+	  cmp STRM+S_IO,x
+	  beq full3
+
+#ifndef NOMMU
+	  lda #0
+	  jsr setmmu1
+	  ldy SYR
+	  lda BLKSIZ,y
+	  sec
+	  sbc STRM+S_II,x
+	  sta BZEI
+	  php
+	  lda BLKSIZ+1,y
+	  sta BZEI+1
+	  lsr
+	  lsr
+	  lsr
+	  lsr
+	  jsr setmmu1
+	  lda BZEI+1
+	  and #$0f
+	  ora #$01
+	  plp
+	  sbc #0
+	  sta BZEI+1
+#else
+	  ldy SYR
+	  sec
+	  lda 0,y
+	  sbc STRM+S_II,x
+	  sta BZEI
+	  lda 1,y
+	  sbc #0
+	  sta BZEI+1
+#endif
+
+	  lda SAC
+	  sta SYR
+
+          ldy STRM+S_II,x
+l0
+	  lda (BZEI),y
+	  sta (SZEI),y
+	  iny
+	  tya
+	  bpl l1		; this heavily depends on Streamsize = 128!!
+	  clc
+	  adc BZEI
+	  sta BZEI
+	  lda #0
+	  bcc l1
+	  inc BZEI+1	  
+l1	  tay
+	  cmp STRM+S_IO,x
+	  bne l2
+	  dey
+	  jmp end
+l2 	  dec SYR
+	  bne l0
+end
+	  tya
+	  sta STRM+S_II,x
+	  lda SAC
+	  sec
+	  sbc SYR
+	  clc
+
+          jsr memtask
+          plp
+          clc
+          rts
+          .)
+
+	  .)
+#endif			/* oldrom */
 
           .(
 &&inistream 

@@ -821,17 +821,20 @@ noenv     lda #E_NOENV
           jsr memtask
           rts
           .)
-/*
+
+#ifndef OLDROM
 #ifndef NOMMU
-setanam   .(
-          asl
-          asl
-          asl
-          asl
-          rts
-          .)
++setmmu1  .(		; set MMU+1 to page (ac) of calling task
+	  clc
+	  adc p0
+	  tay
+	  lda Envtab+TE_MMU,y
+	  sta MMU+1
+	  rts
+	  .)
 #endif
-*/
+#endif
+
           .(
 +send     jsr memsys
           cpx #SEND_SYS

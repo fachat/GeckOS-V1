@@ -1,6 +1,6 @@
 /****************************************************************************
    
-    OS/A65 Version 1.3.3
+    OS/A65 Version 1.3.8
     Multitasking Operating System for 6502 Computers
 
     Copyright (C) 1989-1996 Andre Fachat 
@@ -77,6 +77,11 @@ XRECEIVE  jmp xreceive
 
 SETNMI    jmp setnmi
 
+#ifndef OLDROM
+PUTB	  jmp putb
+GETB	  jmp getb
+#endif
+
 #else
 
 RESET     =$f000
@@ -129,7 +134,12 @@ SIGNAL    =$f069
 XRECEIVE  =$f06c
 
 SETNMI    =$f06f
- 
+
+#ifndef OLDROM 
+PUTB	  =$f072
+GETB	  =$f075
+#endif
+
 #endif
 
 #endif

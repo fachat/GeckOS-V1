@@ -361,7 +361,38 @@ l2a       inc anz
           cmp #F_MODE_RD
           bne l3
 
-ol        ldy #F_BYT
+ol
+#ifndef OLDROM
+b2zei 	=syszp
+-syszp  +=2
+	  ldy #F_LEN
+	  lda (fzei),y
+	  sec
+	  ldy #F_BYT
+	  sbc (fzei),y
+	  beq l4
+	  pha
+	  lda (fzei),y
+	  clc
+	  adc bzei
+	  sta b2zei
+	  lda bzei+1
+	  adc #0
+	  sta b2zei+1
+
+	  ldy #F_STR
+	  lda (fzei),y
+	  tax
+	  pla
+	  ldy #b2zei
+	  jsr PUTB
+	  bcs l5n
+	  ldy #F_BYT
+	  adc (fzei),y
+	  sta (fzei),y
+	  jmp ol
+#else
+          ldy #F_BYT
           lda (fzei),y
           ldy #F_LEN
           cmp (fzei),y
@@ -381,8 +412,9 @@ ol        ldy #F_BYT
           adc #1
           sta (fzei),y
           jmp ol
-
-l4        ldy #F_FL
+#endif
+l4
+          ldy #F_FL
           lda (fzei),y
           cmp #F_FL_EOF
           bne l4a
@@ -413,8 +445,36 @@ l5n       cmp #E_NUL
 
 l3        cmp #F_MODE_WR
           bne l8
-          
-il        ldy #F_BYT
+il          
+#ifndef OLDROM
+	  lda #BUFSIZE
+	  sec
+	  ldy #F_BYT
+	  sbc (fzei),y
+	  beq l6
+
+	  pha
+	  lda (fzei),y
+	  clc
+	  adc bzei
+	  sta b2zei
+	  lda bzei+1
+	  adc #0
+	  sta b2zei+1
+
+	  ldy #F_STR
+	  lda (fzei),y
+	  tax
+	  pla
+	  ldy #bzei
+	  jsr GETB
+	  bcs l7
+	  ldy #F_BYT
+	  adc (fzei),y
+	  sta (fzei),y
+	  jmp il
+#else
+          ldy #F_BYT
           lda (fzei),y
           cmp #BUFSIZE
           beq l6
@@ -433,6 +493,7 @@ il        ldy #F_BYT
           adc #1
           sta (fzei),y
           jmp il
+#endif
 
 l7        cmp #E_EOF
           bne l8

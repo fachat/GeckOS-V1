@@ -277,6 +277,17 @@ $f06f	SETNMI	in systems without MMU, set the system NMI routine address.
 		(carry=0): clear NMI routine.
 		The NMI routine has to be left with RTS opcode!
 
+-------------------------------------------
+
+$f072	PUTB	sends a block of data (address in zeropage, pointed to by
+		yr, length in ac) to stream x
+	 	returns number of transfered bytes in ac (c=0) or error (c=1)
+		doesn't block, returns 0 instead
+
+$f075	GETB	reads a block of data (address in zeropage, pointed to by
+		yr, maximum length in ac) from stream x
+		returns number of transfered bytes in ac (c=0) or error (c=1)
+		doesn't block, returns 0 instead
 
 -------------------------------------------
 
