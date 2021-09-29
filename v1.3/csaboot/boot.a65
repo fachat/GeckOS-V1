@@ -1,0 +1,85 @@
+
+START	=$18
+END	=$20
+
+ZP	=$1f
+TMP	=$21
+
+CHKIN	=$ffc6
+CHRIN	=$ffcf
+CLRCH	=$ffcc
+
+MMU	=$eff0
+CSA	=$f000
+
+	.word $033c
+	*=$033c
+
+	jmp load
+	; jmp boot
+
+	; ---------------------
+boot
+ 	sei
+	lda #4+32	
+	sta $e813	; disable video irqs
+
+	ldx #$18
+mmu	txa
+	sta MMU+8-$18,x
+	inx
+	cpx #$20
+	bne mmu
+
+	jmp CSA
+
+	; ---------------------
+load
+	; open input channel
+	
+	ldx #2
+	jsr CHKIN
+
+	; get start address and ignore
+	jsr CHRIN
+	jsr CHRIN
+
+	; copy 8 blocks of 4k (total 32k) into
+	; VDC RAM at blocks $18...$1f
+
+	lda #START
+	sta TMP
+
+	lda #0
+	sta ZP
+
+	lda TMP
+pageloop
+	sta MMU+4	; map to $4xxx
+
+	lda #$40
+	sta ZP+1
+
+	ldx #16		; 16 pages
+	ldy #0
+bytes
+	jsr CHRIN
+
+	sta (ZP),y
+	iny
+	bne bytes	
+
+	inc ZP+1
+	dex
+	bne bytes
+
+	inc TMP
+	lda TMP
+	cmp #END
+	bne pageloop
+
+	lda #4
+	sta MMU+4
+
+	jmp CLRCH
+

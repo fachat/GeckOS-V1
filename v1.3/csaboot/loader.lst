@@ -1,0 +1,21 @@
+
+
+;loader ==0801==
+    5 on a goto 110, 120, 130
+   10 print  "set basic end"
+   20 poke 53, 16
+   30 clr
+   40 u=8
+   90 a=1
+   95 print"load boot code"
+  100 load"boot",u
+  110 a=2
+  112 print"load rom image"
+  115 open 2,u,0,"csarom"
+  116 sys 828
+  117 close 2
+  120 a=3
+  130 print"press key to start csa65"
+  131 get a$: if a$="" then 131
+  135 sys 828+3
+
