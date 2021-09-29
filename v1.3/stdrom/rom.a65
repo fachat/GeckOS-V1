@@ -69,7 +69,7 @@ sysblk    =$1000
 
 #include  "oafs\fsdev.a65"
 #include  "oafs\fsiec.a65"
-/*#include  "oafs\fsibm.a65"*/
+#include  "oafs\fsibm.a65"
 #include  "oash\sh.a65"
 /*#include  "mcopy\mcopy.a65"*/
 
