@@ -7,7 +7,7 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH} 
 
-all: gecko.rom rom ibmon mcopy c64 slip rmerr 
+all: rom ibmon mcopy c64 slip rmerr 
 
 .obj.a65:
 	(cd $%; ${XA} -x $%);

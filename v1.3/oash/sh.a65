@@ -102,14 +102,15 @@
 #ifndef ROMTEST
           .byt  /*$8,$8,$9,$9,$a,$a,$b,$b,*/ $c,$c,$d,$d,$e,$e,<-1
 #else
-          .byt $c,$1c,$d,$1d,$e,$1e,<-1
+          .byt $8,$18,$9,$19,$a,$1a,$b,$1b,$c,$1c,$d,$1d,$e,$1e,<-1
 #endif /* ROMTEST */
 #else 
 	  .byt <-1
 #endif /* NOMMU */
 
 #ifndef SH2
-          .byt  "shell",0,"shell b c:auto.bat",0
+          ;.byt  "shell",0,"shell b c:auto.bat",0
+          .byt  "shell",0,"shell",0
 #define	SH2
 #else
           .byt  "shell2",0,"shell2",0

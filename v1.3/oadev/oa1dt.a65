@@ -613,7 +613,7 @@ coloop	  sta $d800,y
 i2        sta maxspal
 
 #ifndef C64
-          lda #$0c
+          lda #$0c+32
           sta vdcctrl
 #endif
           lda #1

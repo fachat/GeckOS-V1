@@ -25,7 +25,7 @@
 #define   ROM
 #define   ROMTEST
 
-#define	/*OLDROM*/	/* to be sure that we keep the source for the
+/*#define	OLDROM*/	/* to be sure that we keep the source for the
 			   original 1.3.3 ROM (we cannot test it on real
 			   hardware at the moment, so have to keep a
 			   knowingly working version */
@@ -48,6 +48,9 @@
 #define   NOSYSFKT
 */
 
+/* Monitor device = video1 */
+#define	MONDEV	1
+
 #include  "oa1str.def"
 #include  "oa1fs.def"
 
@@ -66,7 +69,7 @@ sysblk    =$1000
 
 #include  "oafs\fsdev.a65"
 #include  "oafs\fsiec.a65"
-#include  "oafs\fsibm.a65"
+/*#include  "oafs\fsibm.a65"*/
 #include  "oash\sh.a65"
 /*#include  "mcopy\mcopy.a65"*/
 
