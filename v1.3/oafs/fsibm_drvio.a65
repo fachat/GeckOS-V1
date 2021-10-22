@@ -27,6 +27,11 @@
 #define	  CTRL $e8a8
 #define   CIA1 $e8b0
 
+#define	CTRL_SELB	%00000001
+#define	CTRL_MTRB	%00000010
+#define	CTRL_SELA	%00010000
+#define	CTRL_DENS	%00100000
+
 	.(
 
 &&DINIT   .(
@@ -37,7 +42,7 @@
           cmp CIA1+CIA_DDRA    ;
 	  bne xini
 
-	lda #%00000010	; control port, motor B off
+	lda #%00000000	; control port, motor B off, A & B not selected
 	sta CTRL
 
 	; disable TA interrupts
@@ -96,9 +101,10 @@ dl        jsr setdrv     ; a=drive
 
 	; switch off drive 1
 	lda CTRL
-	ora #%00000010
+	;ora #%00000010
+	and #255-CTRL_MTRB
 	sta CTRL
-	bne dl1
+	jmp dl1
 	; switch off drive 0
 dl1a   	lda CIA1+CIA_PRA
 	ora #%00000100
@@ -109,9 +115,10 @@ dl1
           lda CIA1+CIA_PRA
           and #%10000000
           bne dl2		; disk change
-          lda hd,x
-          and #1
-          bne dl2
+	 
+          ;lda hd,x
+          ;and #1
+          ;bne dl2
           lda hd,x
           ora #1
           and #255-2          ; double-stepping aus
@@ -130,10 +137,12 @@ dl2
 	; switch to low density if both motors are off 
           lda CIA1+CIA_PRA
           and #%00000100      ; motor-bit drv a
-	  beq dlx
+	  beq dlx		; motor a is on
 	  lda CTRL
-	  and #%00000010	; motor on drv b
-	  beq dlx
+	  ;and #%00000010	; motor on drv b
+	  ;beq dlx
+	  and #CTRL_MTRB
+	  bne dlx		; motor b is on
 
           jsr lowdens
 dlx       lda dcnt            ; mit z-flag Åbergeben
@@ -174,13 +183,14 @@ side1     lda #%11111110
 
 wloop     .(
           txa
-          ldx #13
+          ldx #26
 wl1       dex
           bne wl1
           tax
           rts
           .)
 
+	; sets SEI flag
 wcmd      .(
           pha
 #ifdef NMIDEV
@@ -206,8 +216,7 @@ wcl       bit WD1+WD_ST
           and #3
           ora divers
           php
-          ;sei
-          jsr wcmd
+          jsr wcmd		; incl sei
           ldx #128
 wc2       jsr setti
 wc1       bit CTRL
@@ -277,7 +286,8 @@ sde       sta actdrv
           and #1
           beq drva
           lda CTRL
-          and #%11111101      ; Motor on
+          ;and #%11111101      ; Motor on
+	  ora #CTRL_MTRB
 	  sta CTRL
           jmp drvs
 
@@ -299,8 +309,10 @@ drvs      ldx actdrv
 #endif
 
 &mdelay lda CTRL
-	and #%00000010
-	beq mdel
+	;and #%00000010
+	;beq mdel
+ 	and #CTRL_MTRB
+	bne mdel
 	lda CIA1+CIA_PRA
 	and #%00000100
 	bne mok
@@ -324,11 +336,14 @@ mok       rts
           beq drva
 	; select drive b
           lda CTRL
-          ora #%00000001
+          ora #CTRL_SELB
+	  and #255-CTRL_SELA
           bne drvs
 drva	; select drive a
           lda CTRL
-          and #%11111110      ; drive select
+          ;and #%11111110      ; drive select
+          ora #CTRL_SELA
+	  and #255-CTRL_SELB
 drvs      sta CTRL
 &densok   rts
           .)
@@ -339,29 +354,29 @@ drvs      sta CTRL
           lsr                 ; auf Portbit schieben
           lsr
           eor CTRL	      ; vergleichen
-          and #%00100000      ; maskieren
+          and #CTRL_DENS      ; maskieren
           beq densok          ; gleich dann fertig
           
           lda hd,x
           bpl lodens
           lda CTRL
-          ora #%00100000
+          ora #CTRL_DENS
           bne denset
 lodens    lda CTRL
-          and #%11011111
+          and #255-CTRL_DENS
 denset    sta CTRL
           jmp mdelay
           .)
           
 &lowdens  lda CTRL
-          and #%11011111
+          and #255-CTRL_DENS
           sta CTRL
           rts
 &highdens ldx actdrv
           lda hd,x
           bpl lowdens
           lda CTRL
-          ora #%00100000
+          ora #CTRL_DENS
           sta CTRL
 #ifdef SHOWD
           lda #"H"
@@ -385,8 +400,7 @@ q         ldx #40        ; bis 5.25" auf Drehzahl nach Density-Wechsel
 qloop     ldx #16         ; 8*32ms=256ms <> 1 umdrehung bei 234 upm
           lda #%11000000 ; Read Adress
           ldy #5
-          ;sei
-          jsr wcmd
+          jsr wcmd	; incl sei
 q1        jsr setti
           lda #%00000001
 q2        bit CIA1+CIA_ICR
@@ -458,8 +472,9 @@ qx        sec
           sta tracks,x
 sd1       lda #<-1
           sta actdrv
-	; actually this does not work here, as
-	; the DRVIO board only has a single select line
+	lda CTRL
+	and #255-CTRL_SELA-CTRL_SELB
+	sta CTRL
           clc  
           rts
           .)
@@ -551,7 +566,7 @@ rdloop    lda sect
           ldx data       ; Anzahl 256-Byte-Blîcke
           ldy #0
           lda #%10001000
-          jsr wcmd
+          jsr wcmd	; incl sei
           lda WD1+WD_ST
 rd1       bit CTRL
           bmi rde
@@ -605,7 +620,7 @@ wrloop    lda sect
           ldx data       ; Anzahl 256-Byte-Blîcke
           ldy #0
           lda #%10101000
-          jsr wcmd
+          jsr wcmd	; incl sei
           lda WD1+WD_ST
 rd1       bit CTRL
           bmi rde
@@ -654,7 +669,7 @@ errloop   ldy #0
           jsr forcend
           ;sei
           lda #%11110100
-          jsr wcmd
+          jsr wcmd		; incl sei
           lda WD1+WD_ST  ; intrq loeschen
           ldy #80
           ldx #$4e

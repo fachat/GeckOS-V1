@@ -34,11 +34,11 @@
           .(
 #ifdef ROM
           .word ende
-          ;.byt PK_FS+$80
-          .byt PK_PRG+$80
+          .byt PK_FS+$80
+          ;.byt PK_PRG+$80
           .byt 8
-          ;.word 0
-          .byt 3,3
+          .word 0
+          ;.byt 3,3
           .word PRG
 #ifndef NOMMU
 #ifndef ROMTEST

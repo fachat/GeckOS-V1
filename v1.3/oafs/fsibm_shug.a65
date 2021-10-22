@@ -23,8 +23,8 @@
 
 
 
-#define   WD1  $e8e0
-#define   VIA2 $e8f0
+#define   WD1  $e8c0
+#define   VIA2 $e8d0
 
 	.(
 
