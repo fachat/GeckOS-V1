@@ -7,47 +7,49 @@ XAOUTPUT=".."
 
 XA=XAINPUT="${XAINPUT}" XAOUTPUT="${XAOUTPUT}" ${XAPATH} 
 
-all: rom ibmon mcopy c64 slip rmerr 
+all: rom mcopy c64 slip rmerr prgs csaboot.obj
 
 .obj.a65:
-	(cd $%; ${XA} -x $%);
+	(cd $%; ${XA} -o %@ $%);
 	
 gecko.rom: 
 	(cd gecko; make );
 	mv gecko/gecko gecko.rom
 
 rom: 
-	(cd stdrom; ${XA} -x rom.a65);
+	(cd stdrom; ${XA} -o rom.obj rom.a65);
 
 inirom: 
-	(cd stdrom; ${XA} -x inirom.a65);
+	(cd stdrom; ${XA} -o initrom.obj inirom.a65);
 
 c64: 
-	(cd c64rom; ${XA} -x c64rom.a65);
+	(cd c64rom; ${XA} -o c64rom.obj c64rom.a65);
 
 basic:
-	(cd oabasic; ${XA} -x oabasic4.a65);
+	(cd oabasic; ${XA} -o oabasic4.obj oabasic4.a65);
 
-ibmon:
-	(cd ibmon; ${XA} -x ibmon.a65);
+prgs:
+	make -C ibmon
 
+csaboot.obj:
+	make -C csaboot
 mcopy:
-	(cd mcopy; ${XA} -x mcopy.a65);
+	(cd mcopy; ${XA} -o mcopy mcopy.a65);
 
 fsiec:
-	(cd oafs; ${XA} -x fsiec.a65);
+	(cd oafs; ${XA} -o fsiec.obj fsiec.a65);
 
 fsibm:
-	(cd oafs; ${XA} -x fsibm.a65);
+	(cd oafs; ${XA} -o fsibm.obj fsibm.a65);
 
 fsdev:
-	(cd oafs; ${XA} -x fsdev.a65);
+	(cd oafs; ${XA} -o fsdev.obj fsdev.a65);
 
 fstcp: slip
 	(cd oaslip; ${MAKE} fstcp);
 
 sh:
-	(cd oash; ${XA} -x sh.a65);
+	(cd oash; ${XA} -o sh.obj sh.a65);
 
 slip: 
 	(cd oaslip; ${XA} main.a65 -o slip.obj -l slip.lab);
@@ -59,5 +61,8 @@ clean: rmerr
 	rm -f *.obj *.rom
 	(cd oaslip; ${MAKE} clean);
 	(cd gecko; ${MAKE} clean);
+	(cd csaboot; ${MAKE} clean);
+	(cd ibmon; ${MAKE} clean);
 
+.phony: ibmon
 
