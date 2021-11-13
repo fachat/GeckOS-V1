@@ -23,7 +23,6 @@
 
 
 #ifndef ROM
-/*#define   INVERT*/
 #define   PARALLEL    
 /*#define   NOCMD*/
 /*#define   NOFS*/
@@ -46,7 +45,7 @@
 #ifndef ROMTEST
           .byt 8,8,9,9,$a,$a,$b,$b,$c,$c,$d,$d,$e,$e,<-1
 #else
-          .byt 8,$18,9,$19,$a,$1a,$b,$1b,$c,$1c,$d,$1d,$e,$1e,<-1
+          .byt 7,$10, 8,$18,9,$19,$a,$1a,$b,$1b,$c,$1c,$d,$1d,$e,$1e,<-1
 #endif
 #else
 	  .byt <-1
@@ -243,14 +242,14 @@ dx        =sysmem
           lda #10
 &&OUT
           stx dx
-#if 1
+#if 0
           ;ldx #$3c
           ;stx $e888
           sei
           ldx #$10
           stx $eff8
           ldx showcnt
-          sta $8000,x
+          sta $7000,x
           inc showcnt
 #else
           ldx #STDOUT
@@ -294,7 +293,8 @@ nib       clc
           adc #"A"-("9"+1)-1
 out       jmp OUT
           .)
-          
+
+#if 0          
 &savdata  .(
           pha
           tya
@@ -304,7 +304,7 @@ out       jmp OUT
           sta $eff8
           ldy #0
 sd1       lda $300,y
-          sta $8000,y
+          sta $7000,y
           lda $400,y
           sta $8100,y
           lda $500,y
@@ -320,10 +320,12 @@ sd1       lda $300,y
           rts
           .)
 #endif
+#endif
 
 /**************************************************************************/
 
 loop      
+	;inc $7000
 #ifndef NOLOOP
           jsr INLOOP		; check for ATN on bus 
 #endif
@@ -331,11 +333,13 @@ loop
 #ifdef NOFS
           jmp loop
 #else
+#ifdef NOLOOP
 	  lda anz		; check if we have open files
 	  bne l1xxx		; if no then
 	  sec			; block while trying to RECEIVE
 	  .byt $24
 l1xxx
+#endif
           clc
           jsr RECEIVE		; check for fs command
           bcs l1
@@ -1336,51 +1340,51 @@ filetab   =sysmem
 #endif
 
 &IECINIT  .(
-#ifdef INVERT
-#else
+	; PIA2
           lda #%00111000
-          sta PIA2+PIA_CRA
+          sta PIA2+PIA_CRA	   ; PIA2 CA2 = NDACOUT high, Access DDRA
           lda #0
-          sta PIA2+PIA_PA          ; DDRA
+          sta PIA2+PIA_PA          ; PIA2 DDRA = Data in, set to input
           cmp PIA2+PIA_PA
-          bne inix
-          lda #%00111100           ; CA2 = NDAC hi
+          bne inix1
+          lda #%00111100           ; PIA2 Access PA
           sta PIA2+PIA_CRA
 
           lda #%00111000
-          sta PIA2+PIA_CRB
+          sta PIA2+PIA_CRB	   ; PIA2 CB2 = DAVOUT high, Access DDRB
           lda #$ff
-          sta PIA2+PIA_PB          ; DDRB
+          sta PIA2+PIA_PB          ; PIA2 DDRB = Data out, set to output
           cmp PIA2+PIA_PB
           bne inix
-          lda #%00111100           ; CB2 = DAV hi
+          lda #%00111100           ; CB2 = DAV hi, Access PB
           sta PIA2+PIA_CRB
-          lda #<-1                 ; DRB
+          lda #<-1                 ; PB = Data out, set to hi
           sta PIA2+PIA_PB
 
-          lda #%00111000
-          sta PIA2+PIA_CRA
-          lda PIA2+PIA_PA          ; DDRA
-          and #%10111111
-          sta PIA2+PIA_PA          ; DDRA
-          cmp PIA2+PIA_PA
-          bne inix
-          lda #%00111100           ; CA2 = NDAC hi
-          sta PIA2+PIA_CRA
-
+	; PIA1
           lda PIA1+PIA_CRA
-          ora #%00111100           ; CA2 = EOI hi
+          ora #%00111000           ; PIA2 CA2 = EOI hi, access DDRA
           sta PIA1+PIA_CRA
+	  pha
 
+	  lda PIA1+PIA_PA
+	  and #%10011111	   ; EOI, ATNIN (C2SW) set to input
+	  sta PIA1+PIA_PA
+
+	  pla
+	  ora #%00000100	   ; PIA2, access PA
+	  sta PIA1+PIA_CRA
+
+	; VIA
           lda VIA1+VIA_DDRB
           and #%00111110
-          ora #%00000110
+          ora #%00011110	; C2MTR=ATNA_en / CWR=ATNA / ATNOUT / NRFDOUT to output
           sta VIA1+VIA_DDRB
           cmp VIA1+VIA_DDRB
-          bne inix
-          lda VIA1+VIA_DRB
-          ora #%00000110
-          sta VIA1+VIA_DRB         ; alle ausgaenge hi
+inix1     bne inix
+          lda VIA1+VIA_DRB	; all lines high
+          ora #%00011110
+          sta VIA1+VIA_DRB         ; all outputs high
 
           lda VIA1+VIA_ACR
           and #%00111101           ; PB2 Latch off, T1 timed IRQ
@@ -1398,7 +1402,6 @@ filetab   =sysmem
           rts
 inix      sec
           rts
-#endif
           .)
 
 #ifndef NOLOOP          
@@ -1437,7 +1440,9 @@ INBUF     =sysmem
 OUTBUF    =sysmem
 -sysmem   +=MAXLEN
 
-RETLOOP   cli
+RETLOOP   
+	;inc $7003
+RETLOOPx	cli
           lda #0
           sta cmdfl
           jsr clrdata
@@ -1446,28 +1451,40 @@ RETLOOP   cli
           jsr ndachi
           jmp nrfdhi
           
-&&INLOOP  cli
-lx        lda VIA1+VIA_DRA
-          cmp VIA1+VIA_DRA
+&&INLOOP  
+	; set ATNA 
+	jsr atnahi
+	; enable ATNA (C2MTR)
+	lda VIA1+VIA_DRB
+	and #%11101111
+	sta VIA1+VIA_DRB
+
+	; TODO ATN detection via PIA2 CA1
+	  cli
+lx        lda PIA1+PIA_PA	; VIA1+VIA_DRA
+          cmp PIA1+PIA_PA	; VIA1+VIA_DRA
           bne lx
-          and #%00010000 
-          bne RETLOOP          ; wait atnlo
-atndet    sei
+          and #%00100000 	
+          beq RETLOOPx		; bne RETLOOPx          ; wait atnlo
+atndet    
+	;inc $7002
+	sei
           lda #0
           sta cmdfl
           jsr clrdata
           jsr davhi
           jsr eoihi
-     jsr ndaclo
+          jsr ndaclo
           jsr nrfdlo
           jsr atnalo
 inext     jsr ndaclo
           jsr nrfdhi
-          lda #$10
-ix1       bit VIA1+VIA_DRA
-          bne iende      ; atn hi
+ix1       lda #$20
+          bit PIA1+PIA_PA; VIA1+VIA_DRA
+          beq iende	;bne iende      ; atn hi
+	  ;lda #$10
           bit VIA1+VIA_DRB
-          bvs ix1        ; dav hi 
+          bmi ix1	; bvs ix1        ; dav hi 
           jsr nrfdlo
           jsr bytin
           pha
@@ -1517,7 +1534,7 @@ il5       ldx cmdfl
           sta listenfl
           
 weiter    bit VIA1+VIA_DRB
-          bvc weiter          ; wait davhi
+          bpl weiter		; bvc weiter          ; wait davhi
           jmp inext
 
 iende     lda listenfl
@@ -1554,7 +1571,9 @@ listenloop
           cmp #FT_MOD_IN
           bne inerr
 
-lstnlp    jsr liecin
+lstnlp    ;inc $7004
+	  jsr liecin
+	  ;inc $7005
           bit status
           bvs ll
           bcs atndet1
@@ -3113,7 +3132,7 @@ i1        jsr fragatn    ; wait nrfd hi
           cmp VIA1+VIA_DRB
           bne i1
           asl
-          bcc i1
+          bpl i1	; bcc i1
           jsr setti
 o11       jsr fragatn    ; atn testen
           bcs atnin
@@ -3147,17 +3166,17 @@ o12c      pla
           .)
           
 fragatn   .(
-          lda VIA1+VIA_DRA
+;          lda VIA1+VIA_DRA
 ;          cmp VIA1+VIA_DRA
 ;          bne fragatn
-          asl
-          eor VIA1+VIA_DRB
-          and #%00100000
-#ifdef INVERT
-          beq s               ; bei inverted umdrehen
-#else
-          bne s
-#endif
+;          asl
+	  lda PIA1+PIA_PA	; ATN IN on PA5
+	  lsr
+	  lsr
+	  lsr
+          eor VIA1+VIA_DRB	; ATNA OUT on CRB3
+          and #%00000100
+          beq s			; bne s
           clc
           rts
 s         sec
@@ -3241,15 +3260,13 @@ o12c      pla
 
 #endif
 
-#ifdef INVERT
-#else
 #ifndef NOLOOP
 atnahi    lda VIA1+VIA_DRB
-          ora #%00100000
+          ora #%00001000
           sta VIA1+VIA_DRB
           rts
 atnalo    lda VIA1+VIA_DRB
-          and #%11011111
+          and #%11110111
           sta VIA1+VIA_DRB
           rts
 #endif
@@ -3259,7 +3276,8 @@ atnhi     lda VIA1+VIA_DRB
           sta VIA1+VIA_DRB
           rts
 atnlo     lda VIA1+VIA_DRB
-          and #%11111011
+	  ora #%00010000		; disable ATNA_en
+          and #%11111011		; ATN lo
           sta VIA1+VIA_DRB
           rts
 
@@ -3293,7 +3311,6 @@ davlo     lda #52
           sta PIA2+PIA_CRB
           rts
 
-#endif
 
 waitdavhi lda VIA1+VIA_DRB
           cmp VIA1+VIA_DRB
@@ -3309,8 +3326,6 @@ tstdev    lda VIA1+VIA_DRB
           cmp #%01000001
           rts
 
-#ifdef INVERT
-#else
 clrdata   lda #<-1
           sta PIA2+PIA_PB
           rts
@@ -3318,7 +3333,6 @@ clrdata   lda #<-1
 out       eor #$ff
           sta PIA2+PIA_PB
           rts
-#endif
 
 waitnrfdhi
           lda VIA1+VIA_DRB
@@ -3367,7 +3381,7 @@ frageoi   lda PIA1+PIA_PA
 
           .)
 
-#else /* PARALLEL ---------------------------------------------------------*/
+#else /* <- PARALLEL / SERIAL -> ----------------------------------------------------*/
 
 #define   VIA1      $e840
 
