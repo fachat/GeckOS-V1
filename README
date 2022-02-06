@@ -1,4 +1,10 @@
 
+
+Note: this version is deprecated and only maintained for reference, and some
+features that have not yet been ported to link:https://github.com/fachat/GeckOS-V2[GeckOS-V2].
+ 
+---
+
 This is the source code for the OS/A65 multitasking operating system for
 6502 computer. It is designed to work with a CS/A65 computer system. But
 then the kernel is completely hardware independent, so that it should
@@ -19,7 +25,5 @@ main directory.
 The doc directory contains the english html documentation.
 
 Andre Fachat
-a.fachat@physik.tu-chemnitz.de
-http://www.tu-chemnitz.de/~fachat
 
 
